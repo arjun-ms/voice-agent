@@ -5,3 +5,4 @@ aiosqlite
 openai
 pytest
 pytest-asyncio
+google-genai

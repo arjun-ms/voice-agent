@@ -42,7 +42,7 @@ async def test_get_summary_returns_persisted_summary():
         await save_conversation_summary(
             db, user["id"],
             "Patient requested a checkup.",
-            '[{"date": "2024-10-15", "time": "10:00", "status": "booked"}]',
+            '[{"date": "2030-10-15", "time": "10:00", "status": "booked"}]',
             "Prefers morning"
         )
     

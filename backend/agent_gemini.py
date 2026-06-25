@@ -5,7 +5,13 @@ from backend import tools
 from google import genai
 from google.genai import types
 
-SYSTEM_PROMPT = """You are a friendly and professional healthcare front-desk AI assistant for Mykare Health.
+from datetime import datetime
+
+def get_system_prompt():
+    today = datetime.now().strftime("%Y-%m-%d")
+    return f"""You are a friendly and professional healthcare front-desk AI assistant for Mykare Health.
+
+Today's date is: {today}. Do not allow booking appointments in the past.
 
 Your responsibilities:
 - Greet patients warmly and help them with appointment scheduling

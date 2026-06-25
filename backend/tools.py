@@ -12,6 +12,9 @@ ALL_SLOTS = [f"{h:02d}:{m:02d}" for h in range(9, 17) for m in (0, 30) if not (h
 
 async def fetch_slots(conn: aiosqlite.Connection, date: str) -> dict:
     """Return available time slots for a given date, excluding booked ones."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    if date < today:
+        raise ValueError(f"Cannot fetch slots for a past date: {date}")
     conn.row_factory = aiosqlite.Row
     async with conn.execute(
         "SELECT time FROM appointments WHERE date = ? AND status = 'booked'",
@@ -24,6 +27,9 @@ async def fetch_slots(conn: aiosqlite.Connection, date: str) -> dict:
 
 async def book_appointment(conn: aiosqlite.Connection, user_id: int, date: str, time: str) -> dict:
     """Book an appointment. Raises ValueError if slot is taken."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    if date < today:
+        raise ValueError(f"Cannot book an appointment in the past: {date}")
     return await create_appointment(conn, user_id, date, time)
 
 async def retrieve_appointments(conn: aiosqlite.Connection, user_id: int) -> list[dict]:

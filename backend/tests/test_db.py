@@ -39,9 +39,9 @@ async def test_create_appointment(memory_db):
     await init_db(memory_db)
     user = await get_or_create_user(memory_db, "+1234567890", "John Doe")
     
-    appt = await create_appointment(memory_db, user["id"], "2024-10-15", "10:00")
+    appt = await create_appointment(memory_db, user["id"], "2030-10-15", "10:00")
     assert appt["user_id"] == user["id"]
-    assert appt["date"] == "2024-10-15"
+    assert appt["date"] == "2030-10-15"
     assert appt["time"] == "10:00"
     assert appt["status"] == "booked"
     assert "id" in appt
@@ -52,18 +52,18 @@ async def test_create_appointment_prevents_double_booking(memory_db):
     user2 = await get_or_create_user(memory_db, "+0987654321", "Jane Doe")
     
     # First booking succeeds
-    await create_appointment(memory_db, user1["id"], "2024-10-15", "11:00")
+    await create_appointment(memory_db, user1["id"], "2030-10-15", "11:00")
     
     # Second booking for the same date and time should fail
     with pytest.raises(ValueError, match="Slot already booked"):
-        await create_appointment(memory_db, user2["id"], "2024-10-15", "11:00")
+        await create_appointment(memory_db, user2["id"], "2030-10-15", "11:00")
 
 async def test_get_and_update_appointment(memory_db):
     await init_db(memory_db)
     user = await get_or_create_user(memory_db, "+1234567890", "John Doe")
     
-    appt1 = await create_appointment(memory_db, user["id"], "2024-10-15", "10:00")
-    appt2 = await create_appointment(memory_db, user["id"], "2024-10-16", "14:00")
+    appt1 = await create_appointment(memory_db, user["id"], "2030-10-15", "10:00")
+    appt2 = await create_appointment(memory_db, user["id"], "2030-10-16", "14:00")
     
     appts = await get_user_appointments(memory_db, user["id"])
     assert len(appts) == 2
@@ -88,8 +88,8 @@ async def test_update_appointment_prevents_double_booking(memory_db):
     user = await get_or_create_user(memory_db, "+1234567890", "John Doe")
     user2 = await get_or_create_user(memory_db, "+0987654321", "Jane Doe")
     
-    await create_appointment(memory_db, user["id"], "2024-10-15", "10:00")
-    appt2 = await create_appointment(memory_db, user2["id"], "2024-10-15", "11:00")
+    await create_appointment(memory_db, user["id"], "2030-10-15", "10:00")
+    appt2 = await create_appointment(memory_db, user2["id"], "2030-10-15", "11:00")
     
     # Try to change appt2 to user1's slot
     with pytest.raises(ValueError, match="Slot already booked"):
@@ -103,7 +103,7 @@ async def test_save_conversation_summary(memory_db):
         memory_db, 
         user["id"], 
         "User wanted to book an appointment.", 
-        '[{"id": 1, "date": "2024-10-15", "time": "10:00"}]',
+        '[{"id": 1, "date": "2030-10-15", "time": "10:00"}]',
         "Prefers morning appointments"
     )
     
@@ -117,5 +117,5 @@ async def test_save_conversation_summary(memory_db):
     assert summary is not None
     assert summary["user_id"] == user["id"]
     assert summary["summary_text"] == "User wanted to book an appointment."
-    assert summary["appointments_json"] == '[{"id": 1, "date": "2024-10-15", "time": "10:00"}]'
+    assert summary["appointments_json"] == '[{"id": 1, "date": "2030-10-15", "time": "10:00"}]'
     assert summary["preferences"] == "Prefers morning appointments"

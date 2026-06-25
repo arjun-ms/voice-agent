@@ -2,7 +2,7 @@ import json
 import pytest
 import aiosqlite
 from backend.db import init_db
-from backend.agent_gemini import get_gemini_tools, SYSTEM_PROMPT, dispatch_tool_call
+from backend.agent_gemini import get_gemini_tools, get_system_prompt, dispatch_tool_call
 
 @pytest.fixture
 async def db():
@@ -27,7 +27,7 @@ def test_tool_schemas_cover_all_seven_tools():
     assert tool_names == expected
 
 def test_system_prompt_contains_key_instructions():
-    prompt_lower = SYSTEM_PROMPT.lower()
+    prompt_lower = get_system_prompt().lower()
     # Must mention healthcare context
     assert "healthcare" in prompt_lower or "health" in prompt_lower
     # Must mention extraction of key fields
@@ -44,13 +44,13 @@ async def test_dispatch_routes_to_correct_tools(db):
     user_id = result["id"]
     
     # fetch_slots
-    result_json = await dispatch_tool_call(db, "fetch_slots", {"date": "2024-10-15"})
+    result_json = await dispatch_tool_call(db, "fetch_slots", {"date": "2030-10-15"})
     result = json.loads(result_json)
     assert "available_slots" in result
     assert "10:00" in result["available_slots"]
     
     # book_appointment
-    result_json = await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2024-10-15", "time": "10:00"})
+    result_json = await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2030-10-15", "time": "10:00"})
     result = json.loads(result_json)
     assert result["status"] == "booked"
     assert result["time"] == "10:00"
@@ -61,7 +61,7 @@ async def test_dispatch_routes_to_correct_tools(db):
     assert len(result) == 1
     
     # fetch_slots again - booked slot should be gone
-    result_json = await dispatch_tool_call(db, "fetch_slots", {"date": "2024-10-15"})
+    result_json = await dispatch_tool_call(db, "fetch_slots", {"date": "2030-10-15"})
     result = json.loads(result_json)
     assert "10:00" not in result["available_slots"]
 
@@ -75,10 +75,10 @@ async def test_dispatch_returns_error_on_double_booking(db):
     # Set up a user and book a slot
     r = await dispatch_tool_call(db, "identify_user", {"phone_number": "+5555555555"})
     user_id = json.loads(r)["id"]
-    await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2024-12-01", "time": "09:00"})
+    await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2030-12-01", "time": "09:00"})
     
     # Try to double-book the same slot
-    result_json = await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2024-12-01", "time": "09:00"})
+    result_json = await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2030-12-01", "time": "09:00"})
     result = json.loads(result_json)
     assert "error" in result
     assert "already booked" in result["error"].lower()

@@ -3,3 +3,4 @@ database.sqlite
 venv
 backend/.pytest_cache
 docs/
+.env
