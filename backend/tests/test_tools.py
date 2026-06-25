@@ -61,7 +61,7 @@ async def test_book_appointment_returns_confirmation(db):
 
 async def test_book_appointment_rejects_double_booking(db):
     user1 = await identify_user(db, "+1234567890", "John Doe")
-    user2 = await identify_user(db, "+0987654321", "Jane Doe")
+    user2 = await identify_user(db, "+1987654321", "Jane Doe")
     
     await book_appointment(db, user1["id"], "2030-10-15", "11:00")
     
@@ -76,6 +76,26 @@ async def test_book_appointment_rejects_past_dates(db):
     user = await identify_user(db, "+1234567890", "John Doe")
     with pytest.raises(ValueError, match="Cannot book an appointment in the past"):
         await book_appointment(db, user["id"], "2000-01-01", "10:00")
+
+async def test_identify_user_rejects_invalid_phone(db):
+    with pytest.raises(ValueError, match="Invalid phone number format"):
+        await identify_user(db, "123")  # too short, no plus
+    with pytest.raises(ValueError, match="Invalid phone number format"):
+        await identify_user(db, "+abcdefghij")
+
+async def test_tools_reject_invalid_date_format(db):
+    user = await identify_user(db, "+1234567890")
+    with pytest.raises(ValueError, match="Invalid date format"):
+        await fetch_slots(db, "10-15-2030") # MM-DD-YYYY
+    with pytest.raises(ValueError, match="Invalid date format"):
+        await book_appointment(db, user["id"], "2030/10/15", "10:00")
+
+async def test_tools_reject_invalid_time_format(db):
+    user = await identify_user(db, "+1234567890")
+    with pytest.raises(ValueError, match="Invalid time format"):
+        await book_appointment(db, user["id"], "2030-10-15", "10:00 AM")
+    with pytest.raises(ValueError, match="Invalid time format"):
+        await book_appointment(db, user["id"], "2030-10-15", "25:00")
 
 async def test_retrieve_appointments_returns_user_bookings(db):
     user = await identify_user(db, "+1234567890", "John Doe")
