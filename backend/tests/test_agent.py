@@ -2,7 +2,7 @@ import json
 import pytest
 import aiosqlite
 from backend.db import init_db
-from backend.agent import TOOL_SCHEMAS, SYSTEM_PROMPT, dispatch_tool_call
+from backend.agent_gemini import get_gemini_tools, SYSTEM_PROMPT, dispatch_tool_call
 
 @pytest.fixture
 async def db():
@@ -12,7 +12,8 @@ async def db():
         yield conn
 
 def test_tool_schemas_cover_all_seven_tools():
-    tool_names = {s["function"]["name"] for s in TOOL_SCHEMAS}
+    tools_list = get_gemini_tools()
+    tool_names = {func.name for func in tools_list[0].function_declarations}
     
     expected = {
         "identify_user",
