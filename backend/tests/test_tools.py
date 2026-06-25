@@ -1,7 +1,7 @@
 import pytest
 import aiosqlite
 from backend.db import init_db
-from backend.tools import identify_user, fetch_slots, book_appointment, retrieve_appointments, cancel_appointment, modify_appointment
+from backend.tools import identify_user, fetch_slots, book_appointment, retrieve_appointments, cancel_appointment, modify_appointment, end_conversation
 
 @pytest.fixture
 async def db():
@@ -116,3 +116,29 @@ async def test_modify_appointment_rejects_double_booking(db):
     
     with pytest.raises(ValueError, match="Slot already booked"):
         await modify_appointment(db, appt2["id"], user["id"], time="10:00")
+
+async def test_end_conversation_persists_summary(db):
+    user = await identify_user(db, "+1234567890", "John Doe")
+    await book_appointment(db, user["id"], "2024-10-15", "10:00")
+    
+    conversation_history = [
+        {"role": "user", "content": "I'd like to book an appointment"},
+        {"role": "assistant", "content": "Sure! I've booked you for Oct 15 at 10:00 AM."},
+    ]
+    
+    # Inject a fake summarizer instead of calling the real LLM
+    async def fake_summarize(history):
+        return {
+            "summary": "Patient booked a morning appointment.",
+            "preferences": "Prefers morning slots",
+        }
+    
+    result = await end_conversation(db, user["id"], conversation_history, summarize_fn=fake_summarize)
+    
+    assert "summary" in result
+    assert "appointments" in result
+    assert "preferences" in result
+    assert "timestamp" in result
+    assert result["summary"] == "Patient booked a morning appointment."
+    assert len(result["appointments"]) == 1
+    assert result["appointments"][0]["time"] == "10:00"

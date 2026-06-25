@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import aiosqlite
+import json
 import os
 
 from backend.db import init_db
@@ -30,3 +31,31 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+@app.get("/api/summary/{user_phone}")
+async def get_summary(user_phone: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        # Look up user by phone
+        async with db.execute("SELECT id FROM users WHERE phone_number = ?", (user_phone,)) as cursor:
+            user = await cursor.fetchone()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get most recent summary for this user
+        async with db.execute(
+            "SELECT * FROM conversation_summaries WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
+            (user["id"],)
+        ) as cursor:
+            summary = await cursor.fetchone()
+        
+        if not summary:
+            raise HTTPException(status_code=404, detail="No summary found")
+        
+        return {
+            "summary": summary["summary_text"],
+            "appointments": json.loads(summary["appointments_json"]) if summary["appointments_json"] else [],
+            "preferences": summary["preferences"],
+            "timestamp": summary["timestamp"],
+        }

@@ -1,5 +1,7 @@
 import aiosqlite
-from backend.db import get_or_create_user, create_appointment, get_user_appointments, update_appointment
+import json
+from datetime import datetime, timezone
+from backend.db import get_or_create_user, create_appointment, get_user_appointments, update_appointment, save_conversation_summary
 
 async def identify_user(conn: aiosqlite.Connection, phone_number: str, name: str = None) -> dict:
     """Look up or create a user by phone number. Returns user info dict."""
@@ -35,3 +37,29 @@ async def cancel_appointment(conn: aiosqlite.Connection, appointment_id: int, us
 async def modify_appointment(conn: aiosqlite.Connection, appointment_id: int, user_id: int, date: str = None, time: str = None) -> bool:
     """Modify an appointment's date/time. Verifies ownership and prevents double booking."""
     return await update_appointment(conn, appointment_id, user_id, date=date, time=time)
+
+async def end_conversation(conn: aiosqlite.Connection, user_id: int, conversation_history: list[dict], summarize_fn=None) -> dict:
+    """End the conversation: generate summary, persist it, return structured result."""
+    # Get the user's appointments
+    appointments = await get_user_appointments(conn, user_id)
+    
+    # Generate summary via the injected summarize function
+    if summarize_fn:
+        llm_result = await summarize_fn(conversation_history)
+    else:
+        llm_result = {"summary": "Conversation ended.", "preferences": ""}
+    
+    summary_text = llm_result.get("summary", "")
+    preferences = llm_result.get("preferences", "")
+    appointments_json = json.dumps(appointments)
+    timestamp = datetime.now(timezone.utc).isoformat()
+    
+    # Persist to DB
+    await save_conversation_summary(conn, user_id, summary_text, appointments_json, preferences)
+    
+    return {
+        "summary": summary_text,
+        "appointments": appointments,
+        "preferences": preferences,
+        "timestamp": timestamp,
+    }
