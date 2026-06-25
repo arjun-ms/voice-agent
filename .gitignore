@@ -1,0 +1,5 @@
+__pycache__
+database.sqlite
+venv
+backend/.pytest_cache
+docs/
