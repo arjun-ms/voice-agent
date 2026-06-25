@@ -1,5 +1,5 @@
 import aiosqlite
-from backend.db import get_or_create_user, create_appointment, get_user_appointments
+from backend.db import get_or_create_user, create_appointment, get_user_appointments, update_appointment
 
 async def identify_user(conn: aiosqlite.Connection, phone_number: str, name: str = None) -> dict:
     """Look up or create a user by phone number. Returns user info dict."""
@@ -23,3 +23,15 @@ async def fetch_slots(conn: aiosqlite.Connection, date: str) -> dict:
 async def book_appointment(conn: aiosqlite.Connection, user_id: int, date: str, time: str) -> dict:
     """Book an appointment. Raises ValueError if slot is taken."""
     return await create_appointment(conn, user_id, date, time)
+
+async def retrieve_appointments(conn: aiosqlite.Connection, user_id: int) -> list[dict]:
+    """Return all appointments for the user."""
+    return await get_user_appointments(conn, user_id)
+
+async def cancel_appointment(conn: aiosqlite.Connection, appointment_id: int, user_id: int) -> bool:
+    """Cancel an appointment. Verifies user ownership."""
+    return await update_appointment(conn, appointment_id, user_id, status="cancelled")
+
+async def modify_appointment(conn: aiosqlite.Connection, appointment_id: int, user_id: int, date: str = None, time: str = None) -> bool:
+    """Modify an appointment's date/time. Verifies ownership and prevents double booking."""
+    return await update_appointment(conn, appointment_id, user_id, date=date, time=time)

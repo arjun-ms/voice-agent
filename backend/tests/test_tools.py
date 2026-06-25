@@ -1,7 +1,7 @@
 import pytest
 import aiosqlite
 from backend.db import init_db
-from backend.tools import identify_user, fetch_slots, book_appointment
+from backend.tools import identify_user, fetch_slots, book_appointment, retrieve_appointments, cancel_appointment, modify_appointment
 
 @pytest.fixture
 async def db():
@@ -67,3 +67,52 @@ async def test_book_appointment_rejects_double_booking(db):
     
     with pytest.raises(ValueError, match="Slot already booked"):
         await book_appointment(db, user2["id"], "2024-10-15", "11:00")
+
+async def test_retrieve_appointments_returns_user_bookings(db):
+    user = await identify_user(db, "+1234567890", "John Doe")
+    await book_appointment(db, user["id"], "2024-10-15", "10:00")
+    await book_appointment(db, user["id"], "2024-10-16", "14:00")
+    
+    result = await retrieve_appointments(db, user["id"])
+    
+    assert len(result) == 2
+    assert result[0]["date"] == "2024-10-15"
+    assert result[1]["date"] == "2024-10-16"
+
+async def test_cancel_appointment_frees_slot(db):
+    user = await identify_user(db, "+1234567890", "John Doe")
+    appt = await book_appointment(db, user["id"], "2024-10-15", "10:00")
+    
+    result = await cancel_appointment(db, appt["id"], user["id"])
+    assert result is True
+    
+    # Verify status changed
+    appts = await retrieve_appointments(db, user["id"])
+    assert appts[0]["status"] == "cancelled"
+    
+    # Verify slot is available again
+    slots = await fetch_slots(db, "2024-10-15")
+    assert "10:00" in slots["available_slots"]
+
+async def test_modify_appointment_updates_time(db):
+    user = await identify_user(db, "+1234567890", "John Doe")
+    appt = await book_appointment(db, user["id"], "2024-10-15", "10:00")
+    
+    result = await modify_appointment(db, appt["id"], user["id"], time="11:00")
+    assert result is True
+    
+    appts = await retrieve_appointments(db, user["id"])
+    assert appts[0]["time"] == "11:00"
+    
+    # Old slot should be free, new slot should be taken
+    slots = await fetch_slots(db, "2024-10-15")
+    assert "10:00" in slots["available_slots"]
+    assert "11:00" not in slots["available_slots"]
+
+async def test_modify_appointment_rejects_double_booking(db):
+    user = await identify_user(db, "+1234567890", "John Doe")
+    await book_appointment(db, user["id"], "2024-10-15", "10:00")
+    appt2 = await book_appointment(db, user["id"], "2024-10-15", "11:00")
+    
+    with pytest.raises(ValueError, match="Slot already booked"):
+        await modify_appointment(db, appt2["id"], user["id"], time="10:00")
