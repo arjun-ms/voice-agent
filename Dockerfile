@@ -17,9 +17,13 @@ RUN pip install --no-cache-dir -r req.txt
 # Copy source code
 COPY backend/ /app/backend/
 COPY seed.sql /app/
+COPY start.sh /app/
 
 # Set Python Path
 ENV PYTHONPATH=/app
 
-# Command to run the agent worker
-CMD ["python", "backend/voice_agent.py", "start"]
+# Make start script executable
+RUN chmod +x /app/start.sh
+
+# Command to run both the FastAPI backend and the LiveKit agent worker
+CMD ["/app/start.sh"]

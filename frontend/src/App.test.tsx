@@ -22,11 +22,28 @@ vi.mock('@livekit/components-react', () => ({
   BarVisualizer: () => <div data-testid="bar-visualizer" />
 }))
 
+// Helper: mock fetch that handles /health and /token
+function mockFetchHealthy(overrides?: Record<string, any>) {
+  return vi.fn().mockImplementation((url: string) => {
+    if (url.includes('/health')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
+    }
+    if (url.includes('/token')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ token: 'mock-token', room_name: 'room-1', server_url: 'ws://mock', ...overrides })
+      })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+  })
+}
+
 describe('App Call UI', () => {
   beforeEach(() => {
     mockUseRemoteParticipants.mockReturnValue([])
     mockUseVoiceAssistant.mockReturnValue({ state: 'disconnected' })
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   it('renders initial state with Start Call button and Avatar placeholder', () => {
@@ -43,6 +60,7 @@ describe('App Call UI', () => {
   })
 
   it('changes state to Connecting when Start Call is clicked', () => {
+    global.fetch = mockFetchHealthy()
     render(<App />)
     const startButton = screen.getByRole('button', { name: /start call/i })
     fireEvent.click(startButton)
@@ -51,10 +69,7 @@ describe('App Call UI', () => {
   })
 
   it('fetches token and changes state to Waiting for agent, then AgentAvatar shows Initializing', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ token: 'mock-token' })
-    })
+    global.fetch = mockFetchHealthy()
 
     const { rerender } = render(<App />)
     const startButton = screen.getByRole('button', { name: /start call/i })
@@ -72,18 +87,14 @@ describe('App Call UI', () => {
     
     // Status should be Initializing... from AgentAvatar
     expect(screen.getByText(/Initializing.../i)).toBeInTheDocument()
-    // "Agent joined" is not visible anymore, we just know it's joined because the end call button is visible.
 
-    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/token', expect.objectContaining({
-      method: 'POST'
-    }))
+    // Health was called, then token
+    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/health', expect.objectContaining({ method: 'GET' }))
+    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/token', expect.objectContaining({ method: 'POST' }))
   })
 
   it('changes state back to Ready when End Call is clicked', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ token: 'mock-token' })
-    })
+    global.fetch = mockFetchHealthy()
 
     const { rerender } = render(<App />)
 
@@ -114,7 +125,10 @@ describe('App Call UI', () => {
       timestamp: '2026-06-26 10:00:00'
     }
 
-    global.fetch = vi.fn().mockImplementation((url) => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/health')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
+      }
       if (url.includes('/token')) {
         return Promise.resolve({
           ok: true,
@@ -150,5 +164,81 @@ describe('App Call UI', () => {
     fireEvent.click(startNewBtn)
     
     expect(screen.getByText('Ready')).toBeInTheDocument()
+  })
+
+  it('pings /health before calling /token to wake up server', async () => {
+    const callOrder: string[] = []
+    
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/health')) {
+        callOrder.push('health')
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
+      }
+      if (url.includes('/token')) {
+        callOrder.push('token')
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ token: 'mock-token', room_name: 'room-1', server_url: 'ws://mock' })
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Start Call'))
+
+    await screen.findByText(/Waiting for agent/i)
+
+    // Health was called before token
+    expect(callOrder[0]).toBe('health')
+    expect(callOrder[1]).toBe('token')
+  })
+
+  it('retries /health and shows waking up status on cold start', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let healthCallCount = 0
+
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/health')) {
+        healthCallCount++
+        if (healthCallCount <= 2) {
+          return Promise.reject(new Error('net::ERR_FAILED'))
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
+      }
+      if (url.includes('/token')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ token: 'mock-token', room_name: 'room-1', server_url: 'ws://mock' })
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    render(<App />)
+    
+    await act(async () => {
+      fireEvent.click(screen.getByText('Start Call'))
+    })
+
+    // First health call fails, status changes to waking up
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    expect(screen.getByText(/Waking up server/i)).toBeInTheDocument()
+
+    // Advance through retries
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100)
+    })
+
+    // Eventually connects
+    await screen.findByText(/Waiting for agent|Connecting/i)
+    expect(healthCallCount).toBeGreaterThanOrEqual(3)
+
+    vi.useRealTimers()
   })
 })

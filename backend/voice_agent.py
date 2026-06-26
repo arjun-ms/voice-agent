@@ -305,24 +305,28 @@ def prewarm(proc: JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
 
 async def entrypoint(ctx: JobContext):
-    from backend.db import init_global_pool
-    await init_global_pool(DATABASE_URL)
-    
-    ctx.log_context_fields = {"room": ctx.room.name}
+    try:
+        from backend.db import init_global_pool
+        await init_global_pool(DATABASE_URL)
+        
+        ctx.log_context_fields = {"room": ctx.room.name}
 
-    session = AgentSession(
-        stt=inference.STT(model="deepgram/nova-3-general"),
-        llm=inference.LLM(model="google/gemini-2.5-flash"),
-        tts=inference.TTS(
-            model="cartesia/sonic-2",
-            voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
-        ),
-        vad=ctx.proc.userdata["vad"],
-    )
+        session = AgentSession(
+            stt=inference.STT(model="deepgram/nova-3-general"),
+            llm=inference.LLM(model="google/gemini-2.5-flash"),
+            tts=inference.TTS(
+                model="cartesia/sonic-2",
+                voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
+            ),
+            vad=ctx.proc.userdata["vad"],
+        )
 
-    agent = MykareHealthAgent()
-    agent.room = ctx.room
-    agent._agent_session = session
+        agent = MykareHealthAgent()
+        agent.room = ctx.room
+        agent._agent_session = session
+    except Exception as e:
+        logger.error(f"Fatal error during agent initialization: {e}", exc_info=True)
+        raise
 
     @ctx.room.on("disconnected")
     def on_disconnected(*args, **kwargs):
@@ -390,5 +394,14 @@ async def entrypoint(ctx: JobContext):
     )
 
 
+def validate_env_vars():
+    required_keys = ["GEMINI_API_KEY", "DEEPGRAM_API_KEY", "CARTESIA_API_KEY"]
+    missing = [key for key in required_keys if not os.getenv(key)]
+    if missing:
+        logger.error(f"FATAL: Missing required environment variables: {', '.join(missing)}")
+        import sys
+        sys.exit(1)
+
 if __name__ == "__main__":
+    validate_env_vars()
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))

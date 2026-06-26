@@ -1,23 +1,64 @@
-import asyncpg
+import aiosqlite
 import os
+import re
 
 _global_pool = None
 
-async def init_global_pool(dsn: str):
+class SQLiteAdapter:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def _convert_query(self, query):
+        # Convert Postgres $1, $2, etc. to SQLite ?
+        return re.sub(r'\$\d+', '?', query)
+
+    async def execute(self, query, *args):
+        await self.conn.execute(self._convert_query(query), args)
+        await self.conn.commit()
+
+    async def fetchrow(self, query, *args):
+        async with self.conn.execute(self._convert_query(query), args) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+    async def fetch(self, query, *args):
+        async with self.conn.execute(self._convert_query(query), args) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+class DummyPool:
+    def __init__(self, adapter):
+        self.adapter = adapter
+
+    def acquire(self):
+        class ContextManager:
+            def __init__(self, adapter):
+                self.adapter = adapter
+            async def __aenter__(self):
+                return self.adapter
+            async def __aexit__(self, exc_type, exc, tb):
+                pass
+        return ContextManager(self.adapter)
+
+    async def close(self):
+        await self.adapter.conn.close()
+
+async def init_global_pool(dsn: str = None):
     global _global_pool
     if _global_pool is None:
-        if os.environ.get("RENDER") == "true" and ("localhost" in dsn or "127.0.0.1" in dsn):
-            raise RuntimeError("DATABASE_URL environment variable is not set. Please configure it in your Render dashboard.")
+        db_path = "database.sqlite"
+        if os.path.exists("backend/database.sqlite"):
+            db_path = "backend/database.sqlite"
+        elif os.path.exists("../database.sqlite"):
+            db_path = "../database.sqlite"
             
-        import urllib.parse
-        parsed = urllib.parse.urlparse(dsn)
-        if parsed.password and "@" in parsed.password:
-            auth = f"{parsed.username}:{urllib.parse.quote(parsed.password)}@" if parsed.password else ""
-            port_part = f":{parsed.port}" if parsed.port else ""
-            netloc = f"{auth}{parsed.hostname}{port_part}"
-            dsn = urllib.parse.urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
-            
-        _global_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
+        conn = await aiosqlite.connect(db_path)
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA journal_mode=WAL")
+        await conn.commit()
+        _global_pool = DummyPool(SQLiteAdapter(conn))
     return _global_pool
 
 def get_pool():
@@ -35,7 +76,7 @@ async def close_global_pool():
 async def init_db(conn):
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone_number TEXT UNIQUE NOT NULL,
             name TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -44,7 +85,7 @@ async def init_db(conn):
     
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS appointments (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             date TEXT NOT NULL,
             time TEXT NOT NULL,
@@ -57,23 +98,16 @@ async def init_db(conn):
     
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS conversation_summaries (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             summary_text TEXT NOT NULL,
             appointments_json TEXT,
             preferences TEXT,
+            cost_breakdown TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     """)
-    
-    # Simple migration for cost_breakdown
-    try:
-        await conn.execute("ALTER TABLE conversation_summaries ADD COLUMN cost_breakdown TEXT")
-    except asyncpg.exceptions.DuplicateColumnError:
-        pass
-        
-    # asyncpg auto-commits DDL statements
 
 async def get_or_create_user(conn, phone_number: str, name: str = None) -> dict:
     user = await conn.fetchrow("SELECT * FROM users WHERE phone_number = $1", phone_number)
@@ -108,7 +142,7 @@ async def get_user_appointments(conn, user_id: int) -> list[dict]:
         "SELECT * FROM appointments WHERE user_id = $1 ORDER BY date, time",
         user_id
     )
-    return [dict(r) for r in rows]
+    return rows
 
 async def update_appointment(conn, appointment_id: int, user_id: int, date: str = None, time: str = None, status: str = None) -> bool:
     # First get existing to know what's changing

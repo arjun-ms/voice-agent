@@ -27,10 +27,33 @@ function App() {
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+  const wakeUpServer = async (maxRetries = 5, delayMs = 3000): Promise<boolean> => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await fetch(`${API_URL}/health`, { method: 'GET' })
+        if (res.ok) return true
+      } catch {
+        // Server is asleep, show wake-up status and retry
+        if (i === 0) setStatus('Waking up server...')
+      }
+      if (i < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, delayMs))
+      }
+    }
+    return false
+  }
+
   const handleStartCall = async () => {
     setStatus('Connecting...')
     setSummaryData(null)
     try {
+      const isAwake = await wakeUpServer()
+      if (!isAwake) {
+        setStatus('Ready')
+        console.error('Server failed to wake up after retries')
+        return
+      }
+      setStatus('Connecting...')
       const response = await fetch(`${API_URL}/token`, {
         method: 'POST',
         headers: {
@@ -42,7 +65,6 @@ function App() {
       if (data.token) { 
         setToken(data.token)
         setServerUrl(data.server_url || 'ws://localhost:7880')
-        // LiveKitRoom will mount and attempt connection. We stay in 'Connecting...' until onConnected fires.
       }
     } catch (e) {
       setStatus('Ready')
