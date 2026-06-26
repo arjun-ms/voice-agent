@@ -407,5 +407,6 @@ if __name__ == "__main__":
     cli.run_app(WorkerOptions(
         agent_name="mykare-voice-agent",
         entrypoint_fnc=entrypoint,
-        prewarm_fnc=prewarm
+        prewarm_fnc=prewarm,
+        port=0
     ))
