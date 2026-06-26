@@ -22,7 +22,6 @@ from livekit.agents import (
     WorkerOptions,
 )
 
-from livekit.plugins import deepgram, google, cartesia
 from backend import tools
 from backend.db import init_db, get_pool
 
@@ -313,19 +312,9 @@ async def entrypoint(ctx: JobContext):
         ctx.log_context_fields = {"room": ctx.room.name}
 
         session = AgentSession(
-            stt=deepgram.STT(
-                model="nova-3-general",
-                api_key=os.getenv("DEEPGRAM_API_KEY")
-            ),
-            llm=google.LLM(
-                model="gemini-2.5-flash",
-                api_key=os.getenv("GEMINI_API_KEY")
-            ),
-            tts=cartesia.TTS(
-                model="sonic-english",
-                voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
-                api_key=os.getenv("CARTESIA_API_KEY")
-            ),
+            stt=inference.STT(),
+            llm=inference.LLM(),
+            tts=inference.TTS(),
             vad=ctx.proc.userdata["vad"],
         )
 
@@ -402,16 +391,8 @@ async def entrypoint(ctx: JobContext):
     )
 
 
-def validate_env_vars():
-    required_keys = ["GEMINI_API_KEY", "DEEPGRAM_API_KEY", "CARTESIA_API_KEY"]
-    missing = [key for key in required_keys if not os.getenv(key)]
-    if missing:
-        logger.error(f"FATAL: Missing required environment variables: {', '.join(missing)}")
-        import sys
-        sys.exit(1)
 
 if __name__ == "__main__":
-    validate_env_vars()
     cli.run_app(WorkerOptions(
         agent_name="mykare-voice-agent",
         entrypoint_fnc=entrypoint,
