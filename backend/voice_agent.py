@@ -313,7 +313,7 @@ async def entrypoint(ctx: JobContext):
 
         session = AgentSession(
             stt=inference.STT(),
-            llm=inference.LLM(),
+            llm=inference.LLM(model="gemini-2.5-flash"),
             tts=inference.TTS(),
             vad=ctx.proc.userdata["vad"],
         )
