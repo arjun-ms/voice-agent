@@ -70,6 +70,32 @@
   text-transform: capitalize;
 }
 
+.cost-breakdown ul {
+  list-style: none;
+  padding: 0.75rem;
+  margin: 0;
+  background: var(--code-bg);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cost-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.cost-breakdown .total-cost {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  font-weight: bold;
+  color: var(--text-h);
+}
+
 .summary-footer {
   margin-top: 1rem;
   color: #64748b;

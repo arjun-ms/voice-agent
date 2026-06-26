@@ -75,10 +75,10 @@ async def test_dispatch_returns_error_on_double_booking(db):
     # Set up a user and book a slot
     r = await dispatch_tool_call(db, "identify_user", {"phone_number": "+5555555555"})
     user_id = json.loads(r)["id"]
-    await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2030-12-01", "time": "09:00"})
+    await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2030-12-02", "time": "09:00"})
     
     # Try to double-book the same slot
-    result_json = await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2030-12-01", "time": "09:00"})
+    result_json = await dispatch_tool_call(db, "book_appointment", {"user_id": user_id, "date": "2030-12-02", "time": "09:00"})
     result = json.loads(result_json)
     assert "error" in result
-    assert "already booked" in result["error"].lower()
+    assert "just taken" in result["error"].lower()

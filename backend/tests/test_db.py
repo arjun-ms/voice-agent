@@ -55,7 +55,7 @@ async def test_create_appointment_prevents_double_booking(memory_db):
     await create_appointment(memory_db, user1["id"], "2030-10-15", "11:00")
     
     # Second booking for the same date and time should fail
-    with pytest.raises(ValueError, match="Slot already booked"):
+    with pytest.raises(ValueError, match="This slot was just taken"):
         await create_appointment(memory_db, user2["id"], "2030-10-15", "11:00")
 
 async def test_get_and_update_appointment(memory_db):
@@ -92,7 +92,7 @@ async def test_update_appointment_prevents_double_booking(memory_db):
     appt2 = await create_appointment(memory_db, user2["id"], "2030-10-15", "11:00")
     
     # Try to change appt2 to user1's slot
-    with pytest.raises(ValueError, match="Slot already booked"):
+    with pytest.raises(ValueError, match="This slot was just taken"):
         await update_appointment(memory_db, appt2["id"], user2["id"], time="10:00")
 
 async def test_save_conversation_summary(memory_db):

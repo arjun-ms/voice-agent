@@ -243,6 +243,22 @@ class MykareHealthAgent(Agent):
                     history.append({"role": role, "text": str(content)})
         except Exception as e:
             logger.error(f"Could not extract history: {e}")
+            
+        cost_breakdown_json = None
+        if hasattr(self, "session_start_time"):
+            end_time = datetime.now()
+            duration_minutes = (end_time - self.session_start_time).total_seconds() / 60.0
+            stt_cost = duration_minutes * 0.0043 # deepgram cost
+            tts_cost = duration_minutes * 0.015 # cartesia cost 
+            llm_cost = duration_minutes * 0.001 # gemini cost
+            cost_breakdown = {
+                "duration_minutes": round(duration_minutes, 2),
+                "stt_deepgram": f"${stt_cost:.4f}",
+                "tts_cartesia": f"${tts_cost:.4f}",
+                "llm_gemini": f"${llm_cost:.4f}",
+                "total_cost": f"${(stt_cost + tts_cost + llm_cost):.4f}"
+            }
+            cost_breakdown_json = json.dumps(cost_breakdown)
                 
         async with aiosqlite.connect(self._db_path) as conn:
             await init_db(conn)
@@ -250,7 +266,8 @@ class MykareHealthAgent(Agent):
                 conn, 
                 user_id, 
                 history, 
-                summarize_fn=generate_summary_from_history
+                summarize_fn=generate_summary_from_history,
+                cost_breakdown=cost_breakdown_json
             )
             await self.send_tool_message("success", "end_conversation", "Conversation ended")
             
@@ -315,6 +332,23 @@ def create_server():
             user_id = agent.current_user_id or 1
             logger.info(f"Room disconnected. Triggering fallback summary for user {user_id}")
             
+            # Calculate cost
+            cost_breakdown_json = None
+            if hasattr(agent, "session_start_time"):
+                end_time = datetime.now()
+                duration_minutes = (end_time - agent.session_start_time).total_seconds() / 60.0
+                stt_cost = duration_minutes * 0.0043
+                tts_cost = duration_minutes * 0.015
+                llm_cost = duration_minutes * 0.001
+                cost_breakdown = {
+                    "duration_minutes": round(duration_minutes, 2),
+                    "stt_deepgram": f"${stt_cost:.4f}",
+                    "tts_cartesia": f"${tts_cost:.4f}",
+                    "llm_gemini": f"${llm_cost:.4f}",
+                    "total_cost": f"${(stt_cost + tts_cost + llm_cost):.4f}"
+                }
+                cost_breakdown_json = json.dumps(cost_breakdown)
+            
             # Extract history directly from the local `session` object to avoid Agent context lookup errors
             history = []
             try:
@@ -336,7 +370,7 @@ def create_server():
                 from backend.summary import generate_summary_from_history
                 async with aiosqlite.connect(agent._db_path) as conn:
                     await tools.end_conversation(
-                        conn, user_id, history, generate_summary_from_history
+                        conn, user_id, history, generate_summary_from_history, cost_breakdown=cost_breakdown_json
                     )
             asyncio.create_task(run_fallback())
 
@@ -345,6 +379,8 @@ def create_server():
         # Wait for the user to join before starting the session
         participant = await ctx.wait_for_participant()
         logger.info(f"Participant joined: {participant.identity}")
+        
+        agent.session_start_time = datetime.now()
         
         await session.start(agent=agent, room=ctx.room)
         logger.info("Session started, generating initial greeting...")

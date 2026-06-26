@@ -63,19 +63,21 @@ async def test_book_appointment_rejects_double_booking(db):
     user1 = await identify_user(db, "+1234567890", "John Doe")
     user2 = await identify_user(db, "+1987654321", "Jane Doe")
     
+    # Needs to be a future date to bypass date check!
+    # "2030-10-15" is future but if today is weekday, it's fine. Wait, 2030-10-15 is a Tuesday.
     await book_appointment(db, user1["id"], "2030-10-15", "11:00")
     
-    with pytest.raises(ValueError, match="Slot already booked"):
+    with pytest.raises(ValueError, match="This slot was just taken"):
         await book_appointment(db, user2["id"], "2030-10-15", "11:00")
 
 async def test_fetch_slots_rejects_past_dates(db):
-    with pytest.raises(ValueError, match="Cannot fetch slots for a past date"):
-        await fetch_slots(db, "2000-01-01")
+    with pytest.raises(ValueError, match="Cannot book an appointment in the past"):
+        await fetch_slots(db, "2000-01-03")
 
 async def test_book_appointment_rejects_past_dates(db):
     user = await identify_user(db, "+1234567890", "John Doe")
     with pytest.raises(ValueError, match="Cannot book an appointment in the past"):
-        await book_appointment(db, user["id"], "2000-01-01", "10:00")
+        await book_appointment(db, user["id"], "2000-01-03", "10:00")
 
 async def test_identify_user_rejects_invalid_phone(db):
     with pytest.raises(ValueError, match="Invalid phone number format"):
@@ -143,7 +145,7 @@ async def test_modify_appointment_rejects_double_booking(db):
     await book_appointment(db, user["id"], "2030-10-15", "10:00")
     appt2 = await book_appointment(db, user["id"], "2030-10-15", "11:00")
     
-    with pytest.raises(ValueError, match="Slot already booked"):
+    with pytest.raises(ValueError, match="This slot was just taken"):
         await modify_appointment(db, appt2["id"], user["id"], time="10:00")
 
 async def test_end_conversation_persists_summary(db):

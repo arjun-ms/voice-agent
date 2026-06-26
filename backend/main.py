@@ -35,6 +35,40 @@ app.add_middleware(
 async def health_check():
     return {"status": "ok"}
 
+@app.get("/api/summary/{phone_number}")
+async def get_summary(phone_number: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        # Get user
+        async with db.execute("SELECT id FROM users WHERE phone_number = ?", (phone_number,)) as cursor:
+            user = await cursor.fetchone()
+            
+        if not user:
+            raise HTTPException(status_code=404, detail="No summary found")
+            
+        # Get the most recent summary for this user
+        async with db.execute(
+            "SELECT * FROM conversation_summaries WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
+            (user["id"],)
+        ) as cursor:
+            summary = await cursor.fetchone()
+        
+        if not summary:
+            raise HTTPException(status_code=404, detail="No summary found")
+        
+        cost_breakdown = None
+        if "cost_breakdown" in summary.keys() and summary["cost_breakdown"]:
+            cost_breakdown = json.loads(summary["cost_breakdown"])
+            
+        return {
+            "summary": summary["summary_text"],
+            "appointments": json.loads(summary["appointments_json"]) if summary["appointments_json"] else [],
+            "preferences": summary["preferences"],
+            "timestamp": summary["timestamp"],
+            "cost_breakdown": cost_breakdown
+        }
+
 @app.get("/api/summary/latest")
 async def get_latest_summary():
     async with aiosqlite.connect(DB_PATH) as db:
@@ -48,12 +82,17 @@ async def get_latest_summary():
         
         if not summary:
             raise HTTPException(status_code=404, detail="No summary found")
+            
+        cost_breakdown = None
+        if "cost_breakdown" in summary.keys() and summary["cost_breakdown"]:
+            cost_breakdown = json.loads(summary["cost_breakdown"])
         
         return {
             "summary": summary["summary_text"],
             "appointments": json.loads(summary["appointments_json"]) if summary["appointments_json"] else [],
             "preferences": summary["preferences"],
             "timestamp": summary["timestamp"],
+            "cost_breakdown": cost_breakdown
         }
 
 from pydantic import BaseModel

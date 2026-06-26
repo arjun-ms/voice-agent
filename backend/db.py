@@ -34,6 +34,13 @@ async def init_db(conn: aiosqlite.Connection):
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     """)
+    
+    # Simple migration for cost_breakdown
+    try:
+        await conn.execute("ALTER TABLE conversation_summaries ADD COLUMN cost_breakdown TEXT")
+    except aiosqlite.OperationalError:
+        pass
+        
     await conn.commit()
 
 async def get_or_create_user(conn: aiosqlite.Connection, phone_number: str, name: str = None) -> dict:
@@ -62,7 +69,7 @@ async def create_appointment(conn: aiosqlite.Connection, user_id: int, date: str
     ) as cursor:
         existing = await cursor.fetchone()
         if existing:
-            raise ValueError("Slot already booked")
+            raise ValueError("This slot was just taken, please choose another available slot.")
             
     # Insert new appointment
     async with conn.execute(
@@ -86,10 +93,12 @@ async def update_appointment(conn: aiosqlite.Connection, appointment_id: int, us
     conn.row_factory = aiosqlite.Row
     
     # First get existing to know what's changing
-    async with conn.execute("SELECT * FROM appointments WHERE id = ? AND user_id = ?", (appointment_id, user_id)) as cursor:
+    async with conn.execute("SELECT * FROM appointments WHERE id = ?", (appointment_id,)) as cursor:
         existing_appt = await cursor.fetchone()
         if not existing_appt:
-            return False
+            raise ValueError("I cant find an appointment with the provided details")
+        if existing_appt["user_id"] != user_id:
+            raise ValueError("Appointment not found or not owned by you")
             
     new_date = date if date is not None else existing_appt["date"]
     new_time = time if time is not None else existing_appt["time"]
@@ -104,7 +113,7 @@ async def update_appointment(conn: aiosqlite.Connection, appointment_id: int, us
             ) as cursor:
                 existing = await cursor.fetchone()
                 if existing:
-                    raise ValueError("Slot already booked")
+                    raise ValueError("This slot was just taken, please choose another available slot.")
         
         await conn.execute(
             "UPDATE appointments SET date = ?, time = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -114,10 +123,10 @@ async def update_appointment(conn: aiosqlite.Connection, appointment_id: int, us
     
     return True
 
-async def save_conversation_summary(conn: aiosqlite.Connection, user_id: int, summary_text: str, appointments_json: str, preferences: str) -> int:
+async def save_conversation_summary(conn: aiosqlite.Connection, user_id: int, summary_text: str, appointments_json: str, preferences: str, cost_breakdown: str = None) -> int:
     async with conn.execute(
-        "INSERT INTO conversation_summaries (user_id, summary_text, appointments_json, preferences) VALUES (?, ?, ?, ?) RETURNING id",
-        (user_id, summary_text, appointments_json, preferences)
+        "INSERT INTO conversation_summaries (user_id, summary_text, appointments_json, preferences, cost_breakdown) VALUES (?, ?, ?, ?, ?) RETURNING id",
+        (user_id, summary_text, appointments_json, preferences, cost_breakdown)
     ) as cursor:
         row = await cursor.fetchone()
         await conn.commit()

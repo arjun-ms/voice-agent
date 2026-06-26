@@ -159,12 +159,6 @@ function App() {
                   End Call
                 </button>
               )}
-              
-              {(status === 'Connecting...' || status === 'Waiting for agent...') && (
-                <button type="button" className="secondary-btn" onClick={handleEndCall} style={{ background: '#666', border: 'none', color: '#fff', padding: '0.75rem 1.5rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                  Cancel
-                </button>
-              )}
 
               {status === 'Ready' && (
                 <button 

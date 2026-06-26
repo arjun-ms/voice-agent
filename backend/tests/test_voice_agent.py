@@ -64,7 +64,7 @@ async def test_book_appointment_error_handling():
         book_res_2 = json.loads(await book_tool(context=MagicMock(), user_id=user_id, date="2030-01-01", time="10:00"))
         
         assert "error" in book_res_2, "Should return a JSON object with 'error' key instead of raising an exception"
-        assert book_res_2["error"] == "Slot already booked"
+        assert book_res_2["error"] == "This slot was just taken, please choose another available slot."
         assert "suggestion" in book_res_2
         assert "offer another time" in book_res_2["suggestion"]
         
