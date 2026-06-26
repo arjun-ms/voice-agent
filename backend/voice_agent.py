@@ -311,20 +311,13 @@ async def entrypoint(ctx: JobContext):
         
         ctx.log_context_fields = {"room": ctx.room.name}
 
-        logger.info("Initializing STT plugin")
-        stt_plugin = inference.STT()
-
-        logger.info("Initializing LLM plugin")
-        llm_plugin = inference.LLM(model="gemini-2.5-flash")
-
-        logger.info("Initializing TTS plugin")
-        tts_plugin = inference.TTS(model="google")
-
-        logger.info("Creating AgentSession")
         session = AgentSession(
-            stt=stt_plugin,
-            llm=llm_plugin,
-            tts=tts_plugin,
+            stt=inference.STT(model="deepgram/nova-3-general"),
+            llm=inference.LLM(model="google/gemini-2.5-flash"),
+            tts=inference.TTS(
+                model="cartesia/sonic-2",
+                voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
+            ),
             vad=ctx.proc.userdata["vad"],
         )
         logger.info("AgentSession created successfully")
