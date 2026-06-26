@@ -30,7 +30,7 @@ function App() {
   const wakeUpServer = async (maxRetries = 5, delayMs = 3000): Promise<boolean> => {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const res = await fetch(`${API_URL}/health`, { method: 'GET' })
+        const res = await fetch(`${API_URL}/ping`, { method: 'GET' })
         if (res.ok) return true
       } catch {
         // Server is asleep, show wake-up status and retry

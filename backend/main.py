@@ -34,8 +34,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/health")
-async def health_check():
+@app.get("/ping")
+async def ping_check():
     return {"status": "ok"}
 
 @app.get("/api/summary/{phone_number}")

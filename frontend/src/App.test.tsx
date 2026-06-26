@@ -89,7 +89,7 @@ describe('App Call UI', () => {
     expect(screen.getByText(/Initializing.../i)).toBeInTheDocument()
 
     // Health was called, then token
-    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/health', expect.objectContaining({ method: 'GET' }))
+    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/ping', expect.objectContaining({ method: 'GET' }))
     expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/token', expect.objectContaining({ method: 'POST' }))
   })
 
@@ -126,7 +126,7 @@ describe('App Call UI', () => {
     }
 
     global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/health')) {
+      if (url.includes('/ping')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
       }
       if (url.includes('/token')) {
@@ -166,12 +166,12 @@ describe('App Call UI', () => {
     expect(screen.getByText('Ready')).toBeInTheDocument()
   })
 
-  it('pings /health before calling /token to wake up server', async () => {
+  it('pings /ping before calling /token to wake up server', async () => {
     const callOrder: string[] = []
     
     global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/health')) {
-        callOrder.push('health')
+      if (url.includes('/ping')) {
+        callOrder.push('ping')
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
       }
       if (url.includes('/token')) {
@@ -190,18 +190,18 @@ describe('App Call UI', () => {
     await screen.findByText(/Waiting for agent/i)
 
     // Health was called before token
-    expect(callOrder[0]).toBe('health')
+    expect(callOrder[0]).toBe('ping')
     expect(callOrder[1]).toBe('token')
   })
 
-  it('retries /health and shows waking up status on cold start', async () => {
+  it('retries /ping and shows waking up status on cold start', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    let healthCallCount = 0
+    let pingCallCount = 0
 
     global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/health')) {
-        healthCallCount++
-        if (healthCallCount <= 2) {
+      if (url.includes('/ping')) {
+        pingCallCount++
+        if (pingCallCount <= 2) {
           return Promise.reject(new Error('net::ERR_FAILED'))
         }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
@@ -221,7 +221,7 @@ describe('App Call UI', () => {
       fireEvent.click(screen.getByText('Start Call'))
     })
 
-    // First health call fails, status changes to waking up
+    // First ping call fails, status changes to waking up
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100)
     })
@@ -237,7 +237,7 @@ describe('App Call UI', () => {
 
     // Eventually connects
     await screen.findByText(/Waiting for agent|Connecting/i)
-    expect(healthCallCount).toBeGreaterThanOrEqual(3)
+    expect(pingCallCount).toBeGreaterThanOrEqual(3)
 
     vi.useRealTimers()
   })
