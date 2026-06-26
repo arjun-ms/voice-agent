@@ -1,4 +1,3 @@
-import React from 'react'
 import './ToolStatusPanel.css'
 
 export type ToolStatus = 'running' | 'success' | 'error'

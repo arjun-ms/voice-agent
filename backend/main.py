@@ -6,6 +6,9 @@ import json
 import os
 
 from backend.db import init_db
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv())
 
 DB_PATH = os.getenv("DB_PATH", "database.sqlite")
 
@@ -22,7 +25,7 @@ app = FastAPI(title="Mykare Voice AI Agent", lifespan=lifespan)
 # Configure CORS for the React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,21 +35,14 @@ app.add_middleware(
 async def health_check():
     return {"status": "ok"}
 
-@app.get("/api/summary/{user_phone}")
-async def get_summary(user_phone: str):
+@app.get("/api/summary/latest")
+async def get_latest_summary():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        # Look up user by phone
-        async with db.execute("SELECT id FROM users WHERE phone_number = ?", (user_phone,)) as cursor:
-            user = await cursor.fetchone()
         
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Get most recent summary for this user
+        # Get the globally most recent summary
         async with db.execute(
-            "SELECT * FROM conversation_summaries WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
-            (user["id"],)
+            "SELECT * FROM conversation_summaries ORDER BY timestamp DESC LIMIT 1"
         ) as cursor:
             summary = await cursor.fetchone()
         
@@ -86,5 +82,6 @@ async def get_token(req: TokenRequest):
     
     return {
         "token": jwt,
-        "room_name": room_name
+        "room_name": room_name,
+        "server_url": os.getenv("LIVEKIT_URL", "ws://localhost:7880")
     }

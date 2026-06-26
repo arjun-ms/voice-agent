@@ -77,7 +77,10 @@ class MykareHealthAgent(Agent):
         self.current_user_id = None
 
     async def on_enter(self):
-        self.session.generate_reply()
+        # The system instructions already tell the agent to greet patients.
+        # generate_reply() is called from the participant_connected event
+        # in the entrypoint, so no chat context manipulation needed here.
+        logger.info("Agent entered session")
 
     async def send_tool_message(self, status: str, tool_name: str, result: str = None):
         """Helper to send tool execution status to frontend via data channel."""
@@ -216,6 +219,7 @@ class MykareHealthAgent(Agent):
         """End the conversation and generate a summary. Call this when the patient says goodbye or is done."""
         await self.send_tool_message("running", "end_conversation")
         from backend.summary import generate_summary_from_history
+        import asyncio
         
         # Robustly extract chat history from the session
         history = []
@@ -249,6 +253,28 @@ class MykareHealthAgent(Agent):
                 summarize_fn=generate_summary_from_history
             )
             await self.send_tool_message("success", "end_conversation", "Conversation ended")
+            
+            # Schedule a disconnect after the agent finishes speaking its final goodbye
+            async def delayed_disconnect():
+                # Wait a moment for the LLM to process the tool return and start speaking
+                await asyncio.sleep(2)
+                
+                try:
+                    # Dynamically wait for the agent to finish speaking (become idle)
+                    agent_session = getattr(self, '_agent_session', None)
+                    if agent_session and hasattr(agent_session, 'wait_for_idle'):
+                        await agent_session.wait_for_idle()
+                    else:
+                        await asyncio.sleep(8)
+                except Exception as e:
+                    logger.warning(f"wait_for_idle failed, falling back to sleep: {e}")
+                    await asyncio.sleep(8)
+                    
+                if hasattr(self, 'room') and self.room:
+                    logger.info("Automatically disconnecting the call as conversation ended.")
+                    await self.room.disconnect()
+            asyncio.create_task(delayed_disconnect())
+
             return json.dumps(result, default=str)
 
 
@@ -280,40 +306,53 @@ def create_server():
         )
 
         agent = MykareHealthAgent()
+        agent.room = ctx.room
+        agent._agent_session = session
 
         @ctx.room.on("disconnected")
         def on_disconnected(*args, **kwargs):
             import asyncio
-            if agent.current_user_id:
-                logger.info(f"Room disconnected. Triggering fallback summary for user {agent.current_user_id}")
-                
-                # Extract history directly from the local `session` object to avoid Agent context lookup errors
-                history = []
-                try:
-                    ctx_obj = getattr(session, "chat_ctx", getattr(session, "history", None))
-                    if ctx_obj is not None:
-                        messages = getattr(ctx_obj, "messages", ctx_obj)
-                        if callable(messages):
-                            messages = messages()
-                        for msg in messages:
-                            role = getattr(msg, 'role', 'unknown')
-                            content = getattr(msg, 'content', getattr(msg, 'text', str(msg)))
-                            if isinstance(content, list):
-                                content = " ".join([str(getattr(p, 'text', p)) for p in content])
-                            history.append({"role": role, "text": str(content)})
-                except Exception as e:
-                    logger.error(f"Fallback summary history extraction failed: {e}")
-                
-                async def run_fallback():
-                    from backend.summary import generate_summary_from_history
-                    async with aiosqlite.connect(agent._db_path) as conn:
-                        await tools.end_conversation(
-                            conn, agent.current_user_id, history, generate_summary_from_history
-                        )
-                asyncio.create_task(run_fallback())
+            user_id = agent.current_user_id or 1
+            logger.info(f"Room disconnected. Triggering fallback summary for user {user_id}")
+            
+            # Extract history directly from the local `session` object to avoid Agent context lookup errors
+            history = []
+            try:
+                ctx_obj = getattr(session, "chat_ctx", getattr(session, "history", None))
+                if ctx_obj is not None:
+                    messages = getattr(ctx_obj, "messages", ctx_obj)
+                    if callable(messages):
+                        messages = messages()
+                    for msg in messages:
+                        role = getattr(msg, 'role', 'unknown')
+                        content = getattr(msg, 'content', getattr(msg, 'text', str(msg)))
+                        if isinstance(content, list):
+                            content = " ".join([str(getattr(p, 'text', p)) for p in content])
+                        history.append({"role": role, "text": str(content)})
+            except Exception as e:
+                logger.error(f"Fallback summary history extraction failed: {e}")
+            
+            async def run_fallback():
+                from backend.summary import generate_summary_from_history
+                async with aiosqlite.connect(agent._db_path) as conn:
+                    await tools.end_conversation(
+                        conn, user_id, history, generate_summary_from_history
+                    )
+            asyncio.create_task(run_fallback())
 
-        await session.start(agent=agent, room=ctx.room)
         await ctx.connect()
+        
+        # Wait for the user to join before starting the session
+        participant = await ctx.wait_for_participant()
+        logger.info(f"Participant joined: {participant.identity}")
+        
+        await session.start(agent=agent, room=ctx.room)
+        logger.info("Session started, generating initial greeting...")
+        # Trigger the greeting - use say() for an immediate, reliable greeting
+        await session.say(
+            "Hello! I'm the Mykare Health assistant. How can I help you today?",
+            allow_interruptions=True
+        )
 
     return server
 

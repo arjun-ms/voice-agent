@@ -101,3 +101,62 @@ h1 {
   transform: translateY(-2px);
   box-shadow: var(--shadow);
 }
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--accent);
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-avatar-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.avatar-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: #2a2a2a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  transition: all 0.3s ease;
+}
+
+.agent-avatar-container.speaking .avatar-circle {
+  box-shadow: 0 0 20px rgba(0, 150, 255, 0.5);
+  border: 2px solid #0096ff;
+}
+
+.agent-avatar-container.listening .avatar-circle {
+  box-shadow: 0 0 15px rgba(0, 255, 100, 0.3);
+  border: 1px solid #00ff64;
+}
+
+.agent-state-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  background: #333;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.avatar-spinner {
+  width: 40px;
+  height: 40px;
+}

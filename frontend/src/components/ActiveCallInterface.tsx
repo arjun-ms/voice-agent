@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useDataChannel } from '@livekit/components-react'
-import ToolStatusPanel, { ToolEvent } from './ToolStatusPanel'
+import ToolStatusPanel from './ToolStatusPanel'
+import type { ToolEvent } from './ToolStatusPanel'
 
 export default function ActiveCallInterface() {
   const [events, setEvents] = useState<ToolEvent[]>([])

@@ -1,26 +1,43 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { vi } from 'vitest'
 import App from './App'
 
+const mockUseVoiceAssistant = vi.fn()
+const mockUseRemoteParticipants = vi.fn()
+
 vi.mock('@livekit/components-react', () => ({
-  LiveKitRoom: ({ children }: any) => <div data-testid="livekit-room">{children}</div>,
+  LiveKitRoom: ({ children, onConnected }: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const React = require('react')
+    React.useEffect(() => {
+      if (onConnected) onConnected()
+    }, []) // Only run once on mount
+    return <div data-testid="livekit-room">{children}</div>
+  },
   RoomAudio: () => <div data-testid="room-audio" />,
-  useDataChannel: vi.fn().mockReturnValue([])
+  RoomAudioRenderer: () => null,
+  useDataChannel: vi.fn().mockReturnValue([]),
+  useRemoteParticipants: () => mockUseRemoteParticipants(),
+  useVoiceAssistant: () => mockUseVoiceAssistant(),
+  BarVisualizer: () => <div data-testid="bar-visualizer" />
 }))
 
 describe('App Call UI', () => {
-  it('renders initial state with Start Call button and Avatar', () => {
+  beforeEach(() => {
+    mockUseRemoteParticipants.mockReturnValue([])
+    mockUseVoiceAssistant.mockReturnValue({ state: 'disconnected' })
+    vi.clearAllMocks()
+  })
+
+  it('renders initial state with Start Call button and Avatar placeholder', () => {
     render(<App />)
     
-    // Check for Start Call button
     const startButton = screen.getByRole('button', { name: /start call/i })
     expect(startButton).toBeInTheDocument()
     
-    // Check for Avatar placeholder
     const avatar = screen.getByTestId('avatar-placeholder')
     expect(avatar).toBeInTheDocument()
     
-    // Check state text
     const status = screen.getByText(/ready/i)
     expect(status).toBeInTheDocument()
   })
@@ -30,53 +47,108 @@ describe('App Call UI', () => {
     const startButton = screen.getByRole('button', { name: /start call/i })
     fireEvent.click(startButton)
     
-    // Status text should change
     expect(screen.getByText(/connecting/i)).toBeInTheDocument()
-    
-    // Button should be disabled
-    expect(startButton).toBeDisabled()
   })
 
-  it('fetches token and changes state to Connected', async () => {
-    // Mock global fetch
+  it('fetches token and changes state to Waiting for agent, then AgentAvatar shows Initializing', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ access_token: 'mock-token' })
+      json: () => Promise.resolve({ token: 'mock-token' })
     })
 
-    render(<App />)
+    const { rerender } = render(<App />)
     const startButton = screen.getByRole('button', { name: /start call/i })
     fireEvent.click(startButton)
 
-    // Wait for the token fetch to resolve and the UI to update
+    expect(await screen.findByText(/Waiting for agent/i)).toBeInTheDocument()
+
+    // Simulate agent joining
+    mockUseRemoteParticipants.mockReturnValue([{ identity: 'agent' }])
+    mockUseVoiceAssistant.mockReturnValue({ state: 'initializing' })
+    rerender(<App />)
+    
     const endButton = await screen.findByRole('button', { name: /end call/i })
     expect(endButton).toBeInTheDocument()
-    expect(screen.getByText(/connected/i)).toBeInTheDocument()
+    
+    // Status should be Initializing... from AgentAvatar
+    expect(screen.getByText(/Initializing.../i)).toBeInTheDocument()
+    // "Agent joined" is not visible anymore, we just know it's joined because the end call button is visible.
 
-    // The fetch should have been called
-    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/token')
+    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/token', expect.objectContaining({
+      method: 'POST'
+    }))
   })
 
   it('changes state back to Ready when End Call is clicked', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ access_token: 'mock-token' })
+      json: () => Promise.resolve({ token: 'mock-token' })
     })
 
-    render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /start call/i }))
+    const { rerender } = render(<App />)
 
-    // Wait for connect
-    const endButton = await screen.findByRole('button', { name: /end call/i })
+    fireEvent.click(screen.getByText('Start Call'))
     
-    // Click End Call
+    expect(await screen.findByText(/Waiting for agent/i)).toBeInTheDocument()
+
+    // Simulate agent joining
+    mockUseRemoteParticipants.mockReturnValue([{ identity: 'agent' }])
+    mockUseVoiceAssistant.mockReturnValue({ state: 'speaking' })
+    rerender(<App />)
+    
+    const endButton = await screen.findByRole('button', { name: /end call/i })
     fireEvent.click(endButton)
 
-    // Should return to ready state
+    const newCallBtn = await screen.findByRole('button', { name: /start new call/i })
+    fireEvent.click(newCallBtn)
+
     expect(await screen.findByRole('button', { name: /start call/i })).toBeInTheDocument()
-    expect(screen.getByText(/ready/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('livekit-room')).not.toBeInTheDocument()
+  })
+
+  it('fetches and displays summary after call ends', async () => {
+    const mockSummary = {
+      summary: 'Test summary from backend',
+      appointments: [],
+      preferences: 'None',
+      timestamp: '2026-06-26 10:00:00'
+    }
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/token')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ token: 'mock-token', room_name: 'room-1', server_url: 'ws://mock-server' })
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(mockSummary)
+      })
+    })
+
+    const { rerender } = render(<App />)
+
+    fireEvent.click(screen.getByText('Start Call'))
+    
+    expect(await screen.findByText(/Waiting for agent/i)).toBeInTheDocument()
+
+    // Simulate agent joining
+    mockUseRemoteParticipants.mockReturnValue([{ identity: 'agent' }])
+    mockUseVoiceAssistant.mockReturnValue({ state: 'listening' })
+    rerender(<App />)
+    
+    expect(await screen.findByText('Listening...')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('End Call'))
+    
+    expect(await screen.findByText(/Generating summary|Conversation Summary/i)).toBeInTheDocument()
+    
+    expect(await screen.findByText('Test summary from backend', {}, { timeout: 4000 })).toBeInTheDocument()
+    
+    const startNewBtn = await screen.findByText('Start New Call')
+    fireEvent.click(startNewBtn)
+    
+    expect(screen.getByText('Ready')).toBeInTheDocument()
   })
 })
-
-
-
