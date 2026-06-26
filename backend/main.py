@@ -34,6 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
 @app.get("/ping")
 async def ping_check():
     return {"status": "ok"}
