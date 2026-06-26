@@ -10,8 +10,10 @@ import './App.css'
 // Helper component to track when the agent joins the room
 function AgentTracker({ onAgentJoined }: { onAgentJoined: () => void }) {
   const participants = useRemoteParticipants()
+  const hasJoined = useRef(false)
   useEffect(() => {
-    if (participants.length > 0) {
+    if (participants.length > 0 && !hasJoined.current) {
+      hasJoined.current = true
       onAgentJoined()
     }
   }, [participants, onAgentJoined])

@@ -311,11 +311,13 @@ async def entrypoint(ctx: JobContext):
         
         ctx.log_context_fields = {"room": ctx.room.name}
 
+        from livekit.plugins import deepgram, google, cartesia
+
         session = AgentSession(
-            stt=inference.STT(model="deepgram/nova-3-general"),
-            llm=inference.LLM(model="google/gemini-2.5-flash"),
-            tts=inference.TTS(
-                model="cartesia/sonic-2",
+            stt=deepgram.STT(model="nova-3-general"),
+            llm=google.LLM(model="gemini-2.5-flash"),
+            tts=cartesia.TTS(
+                model="sonic-english",
                 voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
             ),
             vad=ctx.proc.userdata["vad"],
