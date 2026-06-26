@@ -25,11 +25,13 @@ function App() {
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null)
   const isConnectedRef = useRef(false)
 
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
   const handleStartCall = async () => {
     setStatus('Connecting...')
     setSummaryData(null)
     try {
-      const response = await fetch('http://localhost:8000/token', {
+      const response = await fetch(`${API_URL}/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -57,22 +59,22 @@ function App() {
       // Small delay since backend generates it asynchronously on disconnect
       await new Promise(r => setTimeout(r, 2000))
       
-      const response = await fetch('http://localhost:8000/api/summary/latest')
+      const response = await fetch(`${API_URL}/api/summary/latest`)
       if (response.ok) {
         const data = await response.json()
         setSummaryData(data)
       } else {
         // If it fails, try once more after 3 seconds
         await new Promise(r => setTimeout(r, 3000))
-        const retry = await fetch('http://localhost:8000/api/summary/latest')
+        const retry = await fetch(`${API_URL}/api/summary/latest`)
         if (retry.ok) {
-          setSummaryData(await retry.json())
+           setSummaryData(await retry.json())
         }
       }
     } catch (e) {
       console.error('Failed to fetch summary', e)
     }
-  }, [])
+  }, [API_URL])
 
   // Called by the End Call / Cancel buttons
   const handleEndCall = useCallback(async () => {
