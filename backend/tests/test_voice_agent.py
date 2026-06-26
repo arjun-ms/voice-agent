@@ -72,3 +72,40 @@ async def test_book_appointment_error_handling():
         if os.path.exists(db_path):
             os.remove(db_path)
 
+@pytest.mark.asyncio
+async def test_tool_sends_data_messages():
+    db_path = "test_tool_messages.sqlite"
+    try:
+        agent = MykareHealthAgent(db_path=db_path)
+        
+        # Mock room and local_participant
+        agent.room = MagicMock()
+        agent.room.local_participant = MagicMock()
+        import asyncio
+        
+        # publish_data is an async method
+        async def mock_publish_data(data, reliable=True):
+            agent.room.local_participant.published_messages.append(data)
+            
+        agent.room.local_participant.publish_data = mock_publish_data
+        agent.room.local_participant.published_messages = []
+        
+        tool = next(t for t in agent.tools if t.info.name == "identify_user")
+        await tool(context=MagicMock(), phone_number="+918888888888")
+        
+        messages = agent.room.local_participant.published_messages
+        assert len(messages) >= 2, "Should publish at least 'running' and 'success/error' messages"
+        
+        # Decode and verify first message
+        first_msg = json.loads(messages[0].decode('utf-8'))
+        assert first_msg["tool"] == "identify_user"
+        assert first_msg["status"] == "running"
+        
+        # Decode and verify second message
+        last_msg = json.loads(messages[-1].decode('utf-8'))
+        assert last_msg["tool"] == "identify_user"
+        assert last_msg["status"] in ["success", "error"]
+        
+    finally:
+        if os.path.exists(db_path):
+            os.remove(db_path)

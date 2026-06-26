@@ -79,35 +79,54 @@ class MykareHealthAgent(Agent):
     async def on_enter(self):
         self.session.generate_reply()
 
+    async def send_tool_message(self, status: str, tool_name: str, result: str = None):
+        """Helper to send tool execution status to frontend via data channel."""
+        if hasattr(self, 'room') and self.room and hasattr(self.room.local_participant, 'publish_data'):
+            payload = {"status": status, "tool": tool_name}
+            if result:
+                payload["result"] = result
+            await self.room.local_participant.publish_data(
+                json.dumps(payload).encode('utf-8'), 
+                reliable=True
+            )
+
     @function_tool
     async def identify_user(
         self, context: RunContext, phone_number: str, name: str = None
     ):
         """Look up or create a user by their phone number. Call this when the patient provides their phone number."""
+        await self.send_tool_message("running", "identify_user")
         try:
             async with aiosqlite.connect(self._db_path) as conn:
                 await init_db(conn)
                 result = await tools.identify_user(conn, phone_number, name)
                 self.current_user_id = result.get("id")
+                await self.send_tool_message("success", "identify_user", "User identified successfully")
                 return json.dumps(result, default=str)
         except ValueError as e:
+            await self.send_tool_message("error", "identify_user", str(e))
             return json.dumps({"error": str(e), "suggestion": "Please inform the user and ask for the correct information."})
         except Exception as e:
             logger.error(f"Error in identify_user: {e}")
+            await self.send_tool_message("error", "identify_user", "Internal error")
             return json.dumps({"error": "Internal error occurred while identifying user."})
 
     @function_tool
     async def fetch_slots(self, context: RunContext, date: str):
         """Get available appointment time slots for a given date in YYYY-MM-DD format."""
+        await self.send_tool_message("running", "fetch_slots")
         try:
             async with aiosqlite.connect(self._db_path) as conn:
                 await init_db(conn)
                 result = await tools.fetch_slots(conn, date)
+                await self.send_tool_message("success", "fetch_slots", f"Found {len(result.get('slots', []))} slots")
                 return json.dumps(result, default=str)
         except ValueError as e:
+            await self.send_tool_message("error", "fetch_slots", str(e))
             return json.dumps({"error": str(e), "suggestion": "Please ask the user for a valid future date."})
         except Exception as e:
             logger.error(f"Error in fetch_slots: {e}")
+            await self.send_tool_message("error", "fetch_slots", "Internal error")
             return json.dumps({"error": "Internal error occurred while fetching slots."})
 
     @function_tool
@@ -115,27 +134,34 @@ class MykareHealthAgent(Agent):
         self, context: RunContext, user_id: int, date: str, time: str
     ):
         """Book an appointment for a patient at a specific date (YYYY-MM-DD) and time (HH:MM 24h). The user must be identified first."""
+        await self.send_tool_message("running", "book_appointment")
         try:
             async with aiosqlite.connect(self._db_path) as conn:
                 await init_db(conn)
                 result = await tools.book_appointment(conn, user_id, date, time)
+                await self.send_tool_message("success", "book_appointment", "Appointment booked")
                 return json.dumps(result, default=str)
         except ValueError as e:
+            await self.send_tool_message("error", "book_appointment", str(e))
             return json.dumps({"error": str(e), "suggestion": "Please inform the user that the slot is already booked or invalid, and offer another time."})
         except Exception as e:
             logger.error(f"Error in book_appointment: {e}")
+            await self.send_tool_message("error", "book_appointment", "Internal error")
             return json.dumps({"error": "Internal error occurred while booking the appointment."})
 
     @function_tool
     async def retrieve_appointments(self, context: RunContext, user_id: int):
         """Get all appointments for a patient by their user ID."""
+        await self.send_tool_message("running", "retrieve_appointments")
         try:
             async with aiosqlite.connect(self._db_path) as conn:
                 await init_db(conn)
                 result = await tools.retrieve_appointments(conn, user_id)
+                await self.send_tool_message("success", "retrieve_appointments", f"Found {len(result)} appointments")
                 return json.dumps(result, default=str)
         except Exception as e:
             logger.error(f"Error in retrieve_appointments: {e}")
+            await self.send_tool_message("error", "retrieve_appointments", "Internal error")
             return json.dumps({"error": "Internal error occurred while retrieving appointments."})
 
     @function_tool
@@ -143,15 +169,19 @@ class MykareHealthAgent(Agent):
         self, context: RunContext, appointment_id: int, user_id: int
     ):
         """Cancel an existing appointment. Requires appointment ID and user ID."""
+        await self.send_tool_message("running", "cancel_appointment")
         try:
             async with aiosqlite.connect(self._db_path) as conn:
                 await init_db(conn)
                 result = await tools.cancel_appointment(conn, appointment_id, user_id)
+                await self.send_tool_message("success", "cancel_appointment", "Appointment cancelled")
                 return json.dumps(result, default=str)
         except ValueError as e:
+            await self.send_tool_message("error", "cancel_appointment", str(e))
             return json.dumps({"error": str(e), "suggestion": "Please inform the user."})
         except Exception as e:
             logger.error(f"Error in cancel_appointment: {e}")
+            await self.send_tool_message("error", "cancel_appointment", "Internal error")
             return json.dumps({"error": "Internal error occurred while cancelling the appointment."})
 
     @function_tool
@@ -164,22 +194,27 @@ class MykareHealthAgent(Agent):
         time: str = None,
     ):
         """Modify the date or time of an existing appointment. Requires appointment ID and user ID."""
+        await self.send_tool_message("running", "modify_appointment")
         try:
             async with aiosqlite.connect(self._db_path) as conn:
                 await init_db(conn)
                 result = await tools.modify_appointment(
                     conn, appointment_id, user_id, date=date, time=time
                 )
+                await self.send_tool_message("success", "modify_appointment", "Appointment modified")
                 return json.dumps(result, default=str)
         except ValueError as e:
+            await self.send_tool_message("error", "modify_appointment", str(e))
             return json.dumps({"error": str(e), "suggestion": "Please inform the user that the modification failed because the slot is taken or invalid."})
         except Exception as e:
             logger.error(f"Error in modify_appointment: {e}")
+            await self.send_tool_message("error", "modify_appointment", "Internal error")
             return json.dumps({"error": "Internal error occurred while modifying the appointment."})
 
     @function_tool
     async def end_conversation(self, context: RunContext, user_id: int):
         """End the conversation and generate a summary. Call this when the patient says goodbye or is done."""
+        await self.send_tool_message("running", "end_conversation")
         from backend.summary import generate_summary_from_history
         
         # Robustly extract chat history from the session
@@ -213,6 +248,7 @@ class MykareHealthAgent(Agent):
                 history, 
                 summarize_fn=generate_summary_from_history
             )
+            await self.send_tool_message("success", "end_conversation", "Conversation ended")
             return json.dumps(result, default=str)
 
 

@@ -1,0 +1,74 @@
+.tool-status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.tool-event {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--code-bg);
+  animation: slideIn 0.3s ease-out;
+}
+
+.tool-event-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.indicator {
+  font-weight: bold;
+}
+
+.running-indicator {
+  color: var(--accent);
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+.success-indicator {
+  color: #10b981;
+}
+
+.error-indicator {
+  color: #ef4444;
+}
+
+.tool-name {
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.tool-result {
+  font-size: 0.85rem;
+  color: var(--text);
+  margin-left: 24px;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
