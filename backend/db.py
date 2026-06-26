@@ -8,6 +8,15 @@ async def init_global_pool(dsn: str):
     if _global_pool is None:
         if os.environ.get("RENDER") == "true" and ("localhost" in dsn or "127.0.0.1" in dsn):
             raise RuntimeError("DATABASE_URL environment variable is not set. Please configure it in your Render dashboard.")
+            
+        import urllib.parse
+        parsed = urllib.parse.urlparse(dsn)
+        if parsed.password and "@" in parsed.password:
+            auth = f"{parsed.username}:{urllib.parse.quote(parsed.password)}@" if parsed.password else ""
+            port_part = f":{parsed.port}" if parsed.port else ""
+            netloc = f"{auth}{parsed.hostname}{port_part}"
+            dsn = urllib.parse.urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+            
         _global_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
     return _global_pool
 

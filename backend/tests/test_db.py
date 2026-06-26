@@ -135,3 +135,29 @@ async def test_init_global_pool_fails_on_render_with_localhost():
             os.environ["RENDER"] = original_render
         else:
             del os.environ["RENDER"]
+
+@pytest.mark.asyncio
+async def test_dsn_password_encoding(monkeypatch):
+    import backend.db
+    
+    passed_dsn = None
+    
+    # Mock create_pool to just capture the DSN
+    async def mock_create_pool(dsn, **kwargs):
+        nonlocal passed_dsn
+        passed_dsn = dsn
+        return "mock_pool"
+        
+    monkeypatch.setattr(backend.db.asyncpg, "create_pool", mock_create_pool)
+    
+    # Reset the global pool for the test
+    backend.db._global_pool = None
+    
+    # Test with an unencoded @ in the password
+    test_dsn = "postgresql://user:pass@word@host:5432/db"
+    await backend.db.init_global_pool(test_dsn)
+    
+    assert passed_dsn == "postgresql://user:pass%40word@host:5432/db"
+    
+    # Reset it back
+    backend.db._global_pool = None
