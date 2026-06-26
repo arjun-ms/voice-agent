@@ -22,6 +22,7 @@ from livekit.agents import (
     WorkerOptions,
 )
 
+from livekit.plugins import deepgram, google, cartesia
 from backend import tools
 from backend.db import init_db, get_pool
 
@@ -311,14 +312,19 @@ async def entrypoint(ctx: JobContext):
         
         ctx.log_context_fields = {"room": ctx.room.name}
 
-        from livekit.plugins import deepgram, google, cartesia
-
         session = AgentSession(
-            stt=deepgram.STT(model="nova-3-general"),
-            llm=google.LLM(model="gemini-2.5-flash"),
+            stt=deepgram.STT(
+                model="nova-3-general",
+                api_key=os.getenv("DEEPGRAM_API_KEY")
+            ),
+            llm=google.LLM(
+                model="gemini-2.5-flash",
+                api_key=os.getenv("GEMINI_API_KEY")
+            ),
             tts=cartesia.TTS(
                 model="sonic-english",
                 voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
+                api_key=os.getenv("CARTESIA_API_KEY")
             ),
             vad=ctx.proc.userdata["vad"],
         )
