@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-import aiosqlite
+import asyncpg
 from datetime import datetime
 from dotenv import load_dotenv, find_dotenv
 
@@ -19,10 +19,11 @@ from livekit.agents import (
     function_tool,
     inference,
     cli,
+    WorkerOptions,
 )
 
 from backend import tools
-from backend.db import init_db
+from backend.db import init_db, get_pool
 
 # Configure file logging
 log_dir = "logs"
@@ -44,8 +45,9 @@ logger.addHandler(fh)
 logging.getLogger("livekit").addHandler(fh)
 logging.getLogger("livekit").setLevel(logging.DEBUG)
 
-DB_PATH = os.getenv("DB_PATH", "database.sqlite")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/postgres")
 
+# Replaced with get_pool from backend.db
 
 def get_agent_instructions():
     today = datetime.now().strftime("%Y-%m-%d")
@@ -71,9 +73,9 @@ Guidelines:
 
 
 class MykareHealthAgent(Agent):
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_url: str = None):
         super().__init__(instructions=get_agent_instructions())
-        self._db_path = db_path or DB_PATH
+        self._db_url = db_url or DATABASE_URL
         self.current_user_id = None
 
     async def on_enter(self):
@@ -100,8 +102,8 @@ class MykareHealthAgent(Agent):
         """Look up or create a user by their phone number. Call this when the patient provides their phone number."""
         await self.send_tool_message("running", "identify_user")
         try:
-            async with aiosqlite.connect(self._db_path) as conn:
-                await init_db(conn)
+            pool = get_pool()
+            async with pool.acquire() as conn:
                 result = await tools.identify_user(conn, phone_number, name)
                 self.current_user_id = result.get("id")
                 await self.send_tool_message("success", "identify_user", "User identified successfully")
@@ -119,8 +121,8 @@ class MykareHealthAgent(Agent):
         """Get available appointment time slots for a given date in YYYY-MM-DD format."""
         await self.send_tool_message("running", "fetch_slots")
         try:
-            async with aiosqlite.connect(self._db_path) as conn:
-                await init_db(conn)
+            pool = get_pool()
+            async with pool.acquire() as conn:
                 result = await tools.fetch_slots(conn, date)
                 await self.send_tool_message("success", "fetch_slots", f"Found {len(result.get('slots', []))} slots")
                 return json.dumps(result, default=str)
@@ -139,8 +141,8 @@ class MykareHealthAgent(Agent):
         """Book an appointment for a patient at a specific date (YYYY-MM-DD) and time (HH:MM 24h). The user must be identified first."""
         await self.send_tool_message("running", "book_appointment")
         try:
-            async with aiosqlite.connect(self._db_path) as conn:
-                await init_db(conn)
+            pool = get_pool()
+            async with pool.acquire() as conn:
                 result = await tools.book_appointment(conn, user_id, date, time)
                 await self.send_tool_message("success", "book_appointment", "Appointment booked")
                 return json.dumps(result, default=str)
@@ -157,8 +159,8 @@ class MykareHealthAgent(Agent):
         """Get all appointments for a patient by their user ID."""
         await self.send_tool_message("running", "retrieve_appointments")
         try:
-            async with aiosqlite.connect(self._db_path) as conn:
-                await init_db(conn)
+            pool = get_pool()
+            async with pool.acquire() as conn:
                 result = await tools.retrieve_appointments(conn, user_id)
                 await self.send_tool_message("success", "retrieve_appointments", f"Found {len(result)} appointments")
                 return json.dumps(result, default=str)
@@ -174,8 +176,8 @@ class MykareHealthAgent(Agent):
         """Cancel an existing appointment. Requires appointment ID and user ID."""
         await self.send_tool_message("running", "cancel_appointment")
         try:
-            async with aiosqlite.connect(self._db_path) as conn:
-                await init_db(conn)
+            pool = get_pool()
+            async with pool.acquire() as conn:
                 result = await tools.cancel_appointment(conn, appointment_id, user_id)
                 await self.send_tool_message("success", "cancel_appointment", "Appointment cancelled")
                 return json.dumps(result, default=str)
@@ -199,8 +201,8 @@ class MykareHealthAgent(Agent):
         """Modify the date or time of an existing appointment. Requires appointment ID and user ID."""
         await self.send_tool_message("running", "modify_appointment")
         try:
-            async with aiosqlite.connect(self._db_path) as conn:
-                await init_db(conn)
+            pool = get_pool()
+            async with pool.acquire() as conn:
                 result = await tools.modify_appointment(
                     conn, appointment_id, user_id, date=date, time=time
                 )
@@ -260,8 +262,8 @@ class MykareHealthAgent(Agent):
             }
             cost_breakdown_json = json.dumps(cost_breakdown)
                 
-        async with aiosqlite.connect(self._db_path) as conn:
-            await init_db(conn)
+        pool = get_pool()
+        async with pool.acquire() as conn:
             result = await tools.end_conversation(
                 conn, 
                 user_id, 
@@ -298,101 +300,95 @@ class MykareHealthAgent(Agent):
 # --- LiveKit Agent Server ---
 # Only set up the server when this module is run directly.
 
-def create_server():
+def prewarm(proc: JobProcess):
     from livekit.plugins import silero
+    proc.userdata["vad"] = silero.VAD.load()
 
-    server = AgentServer()
+async def entrypoint(ctx: JobContext):
+    from backend.db import init_global_pool
+    await init_global_pool(DATABASE_URL)
+    
+    ctx.log_context_fields = {"room": ctx.room.name}
 
-    def prewarm(proc: JobProcess):
-        proc.userdata["vad"] = silero.VAD.load()
+    session = AgentSession(
+        stt=inference.STT(model="deepgram/nova-3-general"),
+        llm=inference.LLM(model="google/gemini-2.5-flash"),
+        tts=inference.TTS(
+            model="cartesia/sonic-2",
+            voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
+        ),
+        vad=ctx.proc.userdata["vad"],
+    )
 
-    server.setup_fnc = prewarm
+    agent = MykareHealthAgent()
+    agent.room = ctx.room
+    agent._agent_session = session
 
-    @server.rtc_session()
-    async def entrypoint(ctx: JobContext):
-        ctx.log_context_fields = {"room": ctx.room.name}
-
-        session = AgentSession(
-            stt=inference.STT(model="deepgram/nova-3-general"),
-            llm=inference.LLM(model="google/gemini-2.5-flash"),
-            tts=inference.TTS(
-                model="cartesia/sonic-2",
-                voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
-            ),
-            vad=ctx.proc.userdata["vad"],
-        )
-
-        agent = MykareHealthAgent()
-        agent.room = ctx.room
-        agent._agent_session = session
-
-        @ctx.room.on("disconnected")
-        def on_disconnected(*args, **kwargs):
-            import asyncio
-            user_id = agent.current_user_id or 1
-            logger.info(f"Room disconnected. Triggering fallback summary for user {user_id}")
-            
-            # Calculate cost
-            cost_breakdown_json = None
-            if hasattr(agent, "session_start_time"):
-                end_time = datetime.now()
-                duration_minutes = (end_time - agent.session_start_time).total_seconds() / 60.0
-                stt_cost = duration_minutes * 0.0043
-                tts_cost = duration_minutes * 0.015
-                llm_cost = duration_minutes * 0.001
-                cost_breakdown = {
-                    "duration_minutes": round(duration_minutes, 2),
-                    "stt_deepgram": f"${stt_cost:.4f}",
-                    "tts_cartesia": f"${tts_cost:.4f}",
-                    "llm_gemini": f"${llm_cost:.4f}",
-                    "total_cost": f"${(stt_cost + tts_cost + llm_cost):.4f}"
-                }
-                cost_breakdown_json = json.dumps(cost_breakdown)
-            
-            # Extract history directly from the local `session` object to avoid Agent context lookup errors
-            history = []
-            try:
-                ctx_obj = getattr(session, "chat_ctx", getattr(session, "history", None))
-                if ctx_obj is not None:
-                    messages = getattr(ctx_obj, "messages", ctx_obj)
-                    if callable(messages):
-                        messages = messages()
-                    for msg in messages:
-                        role = getattr(msg, 'role', 'unknown')
-                        content = getattr(msg, 'content', getattr(msg, 'text', str(msg)))
-                        if isinstance(content, list):
-                            content = " ".join([str(getattr(p, 'text', p)) for p in content])
-                        history.append({"role": role, "text": str(content)})
-            except Exception as e:
-                logger.error(f"Fallback summary history extraction failed: {e}")
-            
-            async def run_fallback():
-                from backend.summary import generate_summary_from_history
-                async with aiosqlite.connect(agent._db_path) as conn:
-                    await tools.end_conversation(
-                        conn, user_id, history, generate_summary_from_history, cost_breakdown=cost_breakdown_json
-                    )
-            asyncio.create_task(run_fallback())
-
-        await ctx.connect()
+    @ctx.room.on("disconnected")
+    def on_disconnected(*args, **kwargs):
+        import asyncio
+        user_id = agent.current_user_id or 1
+        logger.info(f"Room disconnected. Triggering fallback summary for user {user_id}")
         
-        # Wait for the user to join before starting the session
-        participant = await ctx.wait_for_participant()
-        logger.info(f"Participant joined: {participant.identity}")
+        # Calculate cost
+        cost_breakdown_json = None
+        if hasattr(agent, "session_start_time"):
+            end_time = datetime.now()
+            duration_minutes = (end_time - agent.session_start_time).total_seconds() / 60.0
+            stt_cost = duration_minutes * 0.0043
+            tts_cost = duration_minutes * 0.015
+            llm_cost = duration_minutes * 0.001
+            cost_breakdown = {
+                "duration_minutes": round(duration_minutes, 2),
+                "stt_deepgram": f"${stt_cost:.4f}",
+                "tts_cartesia": f"${tts_cost:.4f}",
+                "llm_gemini": f"${llm_cost:.4f}",
+                "total_cost": f"${(stt_cost + tts_cost + llm_cost):.4f}"
+            }
+            cost_breakdown_json = json.dumps(cost_breakdown)
         
-        agent.session_start_time = datetime.now()
+        # Extract history directly from the local `session` object to avoid Agent context lookup errors
+        history = []
+        try:
+            ctx_obj = getattr(session, "chat_ctx", getattr(session, "history", None))
+            if ctx_obj is not None:
+                messages = getattr(ctx_obj, "messages", ctx_obj)
+                if callable(messages):
+                    messages = messages()
+                for msg in messages:
+                    role = getattr(msg, 'role', 'unknown')
+                    content = getattr(msg, 'content', getattr(msg, 'text', str(msg)))
+                    if isinstance(content, list):
+                        content = " ".join([str(getattr(p, 'text', p)) for p in content])
+                    history.append({"role": role, "text": str(content)})
+        except Exception as e:
+            logger.error(f"Fallback summary history extraction failed: {e}")
         
-        await session.start(agent=agent, room=ctx.room)
-        logger.info("Session started, generating initial greeting...")
-        # Trigger the greeting - use say() for an immediate, reliable greeting
-        await session.say(
-            "Hello! I'm the Mykare Health assistant. How can I help you today?",
-            allow_interruptions=True
-        )
+        async def run_fallback():
+            from backend.summary import generate_summary_from_history
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                await tools.end_conversation(
+                    conn, user_id, history, generate_summary_from_history, cost_breakdown=cost_breakdown_json
+                )
+        asyncio.create_task(run_fallback())
 
-    return server
+    await ctx.connect()
+    
+    # Wait for the user to join before starting the session
+    participant = await ctx.wait_for_participant()
+    logger.info(f"Participant joined: {participant.identity}")
+    
+    agent.session_start_time = datetime.now()
+        
+    await session.start(agent=agent, room=ctx.room)
+    logger.info("Session started, generating initial greeting...")
+    # Trigger the greeting - use say() for an immediate, reliable greeting
+    await session.say(
+        "Hello! I'm the Mykare Health assistant. How can I help you today?",
+        allow_interruptions=True
+    )
 
 
 if __name__ == "__main__":
-    server = create_server()
-    cli.run_app(server)
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))

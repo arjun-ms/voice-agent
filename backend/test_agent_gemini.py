@@ -8,12 +8,12 @@ Usage:
 """
 import asyncio
 import os
-import aiosqlite
+import asyncpg
 from google import genai
 from backend.db import init_db
 from backend.agent_gemini import get_system_prompt, get_gemini_tools, run_agent_turn
 
-DB_PATH = os.getenv("DB_PATH", "database.sqlite")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 async def main():
     # Load .env file if it exists
@@ -39,8 +39,13 @@ async def main():
         tools=get_gemini_tools(),
     )
 
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute("PRAGMA foreign_keys = ON;")
+    if not DATABASE_URL:
+        print("Error: DATABASE_URL environment variable is required.")
+        return
+
+    pool = await asyncpg.create_pool(DATABASE_URL)
+    
+    async with pool.acquire() as conn:
         await init_db(conn)
         
         # We need an AsyncChat instance
@@ -72,6 +77,7 @@ async def main():
                                 print(f"  [Tool Result] {part.function_response.name} -> {part.function_response.response}")
                                 
             print(f"\nAgent: {response_text}\n")
+    await pool.close()
 
 if __name__ == "__main__":
     asyncio.run(main())

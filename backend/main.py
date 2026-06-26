@@ -1,24 +1,27 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import aiosqlite
+import asyncpg
 import json
 import os
 
-from backend.db import init_db
+from backend.db import init_db, init_global_pool, close_global_pool, get_pool
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
-DB_PATH = os.getenv("DB_PATH", "database.sqlite")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/postgres")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize the database
-    async with aiosqlite.connect(DB_PATH) as db:
-        await init_db(db)
+    await init_global_pool(DATABASE_URL)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await init_db(conn)
     yield
-    # Shutdown logic (if any)
+    # Shutdown logic
+    await close_global_pool()
 
 app = FastAPI(title="Mykare Voice AI Agent", lifespan=lifespan)
 
@@ -37,22 +40,19 @@ async def health_check():
 
 @app.get("/api/summary/{phone_number}")
 async def get_summary(phone_number: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        
+    pool = get_pool()
+    async with pool.acquire() as conn:
         # Get user
-        async with db.execute("SELECT id FROM users WHERE phone_number = ?", (phone_number,)) as cursor:
-            user = await cursor.fetchone()
+        user = await conn.fetchrow("SELECT id FROM users WHERE phone_number = $1", phone_number)
             
         if not user:
             raise HTTPException(status_code=404, detail="No summary found")
             
         # Get the most recent summary for this user
-        async with db.execute(
-            "SELECT * FROM conversation_summaries WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
-            (user["id"],)
-        ) as cursor:
-            summary = await cursor.fetchone()
+        summary = await conn.fetchrow(
+            "SELECT * FROM conversation_summaries WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 1",
+            user["id"]
+        )
         
         if not summary:
             raise HTTPException(status_code=404, detail="No summary found")
@@ -71,14 +71,12 @@ async def get_summary(phone_number: str):
 
 @app.get("/api/summary/latest")
 async def get_latest_summary():
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        
+    pool = get_pool()
+    async with pool.acquire() as conn:
         # Get the globally most recent summary
-        async with db.execute(
+        summary = await conn.fetchrow(
             "SELECT * FROM conversation_summaries ORDER BY timestamp DESC LIMIT 1"
-        ) as cursor:
-            summary = await cursor.fetchone()
+        )
         
         if not summary:
             raise HTTPException(status_code=404, detail="No summary found")

@@ -1,5 +1,5 @@
 import json
-import aiosqlite
+import asyncpg
 from backend import tools
 
 SYSTEM_PROMPT = """You are a friendly and professional healthcare front-desk AI assistant for Mykare Health.
@@ -129,7 +129,7 @@ TOOL_SCHEMAS = [
 ]
 
 
-async def dispatch_tool_call(conn: aiosqlite.Connection, tool_name: str, arguments: dict, conversation_history: list[dict] = None) -> str:
+async def dispatch_tool_call(conn: asyncpg.Connection, tool_name: str, arguments: dict, conversation_history: list[dict] = None) -> str:
     """Execute a tool call and return the result as a JSON string for the LLM."""
     try:
         if tool_name == "identify_user":
@@ -157,7 +157,7 @@ async def dispatch_tool_call(conn: aiosqlite.Connection, tool_name: str, argumen
         return json.dumps({"error": str(e)})
 
 
-async def run_agent_turn(conn: aiosqlite.Connection, messages: list[dict], llm_client) -> tuple[str, list[dict]]:
+async def run_agent_turn(conn: asyncpg.Connection, messages: list[dict], llm_client) -> tuple[str, list[dict]]:
     """
     Run one agent turn: send messages to LLM, handle any tool calls, return final response.
     

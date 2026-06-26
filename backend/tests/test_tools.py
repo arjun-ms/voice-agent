@@ -1,14 +1,12 @@
 import pytest
-import aiosqlite
+import asyncpg
+import os
 from backend.db import init_db
 from backend.tools import identify_user, fetch_slots, book_appointment, retrieve_appointments, cancel_appointment, modify_appointment, end_conversation
 
-@pytest.fixture
-async def db():
-    async with aiosqlite.connect(":memory:") as conn:
-        await conn.execute("PRAGMA foreign_keys = ON;")
-        await init_db(conn)
-        yield conn
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "postgresql://localhost:5432/postgres")
+
+
 
 async def test_identify_user_creates_new_user(db):
     result = await identify_user(db, "+1234567890", "John Doe")

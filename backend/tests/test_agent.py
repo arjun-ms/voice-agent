@@ -1,17 +1,13 @@
 import json
 import pytest
-import aiosqlite
+import asyncpg
 from backend.db import init_db
 from backend.agent_gemini import get_gemini_tools, get_system_prompt, dispatch_tool_call
 
-@pytest.fixture
-async def db():
-    async with aiosqlite.connect(":memory:") as conn:
-        await conn.execute("PRAGMA foreign_keys = ON;")
-        await init_db(conn)
-        yield conn
 
-def test_tool_schemas_cover_all_seven_tools():
+
+@pytest.mark.asyncio
+async def test_tool_schemas_cover_all_seven_tools():
     tools_list = get_gemini_tools()
     tool_names = {func.name for func in tools_list[0].function_declarations}
     
@@ -26,7 +22,8 @@ def test_tool_schemas_cover_all_seven_tools():
     }
     assert tool_names == expected
 
-def test_system_prompt_contains_key_instructions():
+@pytest.mark.asyncio
+async def test_system_prompt_contains_key_instructions():
     prompt_lower = get_system_prompt().lower()
     # Must mention healthcare context
     assert "healthcare" in prompt_lower or "health" in prompt_lower
@@ -36,6 +33,7 @@ def test_system_prompt_contains_key_instructions():
     assert "date" in prompt_lower
     assert "time" in prompt_lower
 
+@pytest.mark.asyncio
 async def test_dispatch_routes_to_correct_tools(db):
     # identify_user
     result_json = await dispatch_tool_call(db, "identify_user", {"phone_number": "+1234567890", "name": "John Doe"})
@@ -65,12 +63,14 @@ async def test_dispatch_routes_to_correct_tools(db):
     result = json.loads(result_json)
     assert "10:00" not in result["available_slots"]
 
+@pytest.mark.asyncio
 async def test_dispatch_unknown_tool_returns_error(db):
     result_json = await dispatch_tool_call(db, "nonexistent_tool", {})
     result = json.loads(result_json)
     assert "error" in result
     assert "Unknown tool" in result["error"]
 
+@pytest.mark.asyncio
 async def test_dispatch_returns_error_on_double_booking(db):
     # Set up a user and book a slot
     r = await dispatch_tool_call(db, "identify_user", {"phone_number": "+5555555555"})

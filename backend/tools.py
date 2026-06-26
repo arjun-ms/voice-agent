@@ -1,4 +1,4 @@
-import aiosqlite
+
 import json
 from datetime import datetime, timezone
 import re
@@ -16,7 +16,7 @@ def validate_time(time: str):
     if not re.match(r"^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$", time):
         raise ValueError("Invalid time format. Must be HH:MM in 24-hour format")
 
-async def identify_user(conn: aiosqlite.Connection, phone_number: str, name: str = None) -> dict:
+async def identify_user(conn, phone_number: str, name: str = None) -> dict:
     """Look up or create a user by phone number. Returns user info dict."""
     validate_phone(phone_number)
     return await get_or_create_user(conn, phone_number, name)
@@ -48,16 +48,15 @@ def check_date_and_time(date: str, time: str = None):
     if time and time not in ALL_SLOTS:
         raise ValueError(f"Invalid time {time}. Please book only from available slots.")
 
-async def fetch_slots(conn: aiosqlite.Connection, date: str) -> dict:
+async def fetch_slots(conn, date: str) -> dict:
     """Return available time slots for a given date, excluding booked ones."""
     check_date_and_time(date)
     
-    conn.row_factory = aiosqlite.Row
-    async with conn.execute(
-        "SELECT time FROM appointments WHERE date = ? AND status = 'booked'",
-        (date,)
-    ) as cursor:
-        booked = {row["time"] for row in await cursor.fetchall()}
+    rows = await conn.fetch(
+        "SELECT time FROM appointments WHERE date = $1 AND status = 'booked'",
+        date
+    )
+    booked = {row["time"] for row in rows}
     
     # Filter out past times if the date is today
     now = datetime.now()
@@ -75,21 +74,21 @@ async def fetch_slots(conn: aiosqlite.Connection, date: str) -> dict:
         
     return {"date": date, "available_slots": available}
 
-async def book_appointment(conn: aiosqlite.Connection, user_id: int, date: str, time: str) -> dict:
+async def book_appointment(conn, user_id: int, date: str, time: str) -> dict:
     """Book an appointment. Raises ValueError if slot is taken."""
     validate_time(time)
     check_date_and_time(date, time)
     return await create_appointment(conn, user_id, date, time)
 
-async def retrieve_appointments(conn: aiosqlite.Connection, user_id: int) -> list[dict]:
+async def retrieve_appointments(conn, user_id: int) -> list[dict]:
     """Return all appointments for the user."""
     return await get_user_appointments(conn, user_id)
 
-async def cancel_appointment(conn: aiosqlite.Connection, appointment_id: int, user_id: int) -> bool:
+async def cancel_appointment(conn, appointment_id: int, user_id: int) -> bool:
     """Cancel an appointment. Verifies user ownership."""
     return await update_appointment(conn, appointment_id, user_id, status="cancelled")
 
-async def modify_appointment(conn: aiosqlite.Connection, appointment_id: int, user_id: int, date: str = None, time: str = None) -> bool:
+async def modify_appointment(conn, appointment_id: int, user_id: int, date: str = None, time: str = None) -> bool:
     """Modify an appointment's date/time. Verifies ownership and prevents double booking."""
     if date or time:
         # If modifying, we need to check the combined new date/time.
@@ -108,7 +107,7 @@ async def modify_appointment(conn: aiosqlite.Connection, appointment_id: int, us
                 
     return await update_appointment(conn, appointment_id, user_id, date=date, time=time)
 
-async def end_conversation(conn: aiosqlite.Connection, user_id: int, conversation_history: list[dict], summarize_fn=None, cost_breakdown: str = None) -> dict:
+async def end_conversation(conn, user_id: int, conversation_history: list[dict], summarize_fn=None, cost_breakdown: str = None) -> dict:
     """End the conversation: generate summary, persist it, return structured result."""
     # Get the user's appointments
     appointments = await get_user_appointments(conn, user_id)
@@ -121,7 +120,8 @@ async def end_conversation(conn: aiosqlite.Connection, user_id: int, conversatio
     
     summary_text = llm_result.get("summary", "")
     preferences = llm_result.get("preferences", "")
-    appointments_json = json.dumps(appointments)
+    appointments_dict = [dict(a) for a in appointments]
+    appointments_json = json.dumps(appointments_dict, default=str)
     timestamp = datetime.now(timezone.utc).isoformat()
     
     # Persist to DB

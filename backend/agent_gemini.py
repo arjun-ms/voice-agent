@@ -1,6 +1,6 @@
 import json
 import os
-import aiosqlite
+import asyncpg
 from backend import tools
 from google import genai
 from google.genai import types
@@ -121,7 +121,7 @@ def get_gemini_tools():
         )
     ]
 
-async def dispatch_tool_call(conn: aiosqlite.Connection, tool_name: str, arguments: dict, conversation_history: list[types.Content] = None) -> str:
+async def dispatch_tool_call(conn: asyncpg.Connection, tool_name: str, arguments: dict, conversation_history: list[types.Content] = None) -> str:
     """Execute a tool call and return the result as a JSON string for the LLM."""
     try:
         if tool_name == "identify_user":
@@ -151,7 +151,7 @@ async def dispatch_tool_call(conn: aiosqlite.Connection, tool_name: str, argumen
         return json.dumps({"error": str(e)})
 
 
-async def run_agent_turn(conn: aiosqlite.Connection, chat: genai.chats.AsyncChat, user_message: str) -> str:
+async def run_agent_turn(conn: asyncpg.Connection, chat: genai.chats.AsyncChat, user_message: str) -> str:
     """
     Run one agent turn using the Gemini SDK.
     

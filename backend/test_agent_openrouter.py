@@ -8,12 +8,12 @@ Usage:
 """
 import asyncio
 import os
-import aiosqlite
+import asyncpg
 from openai import AsyncOpenAI
 from backend.db import init_db
 from backend.agent_openrouter import SYSTEM_PROMPT, run_agent_turn
 
-DB_PATH = os.getenv("DB_PATH", "database.sqlite")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 async def main():
     # Load .env file if it exists
@@ -33,8 +33,13 @@ async def main():
         base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
     )
     
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute("PRAGMA foreign_keys = ON;")
+    if not DATABASE_URL:
+        print("Error: DATABASE_URL environment variable is required.")
+        return
+
+    pool = await asyncpg.create_pool(DATABASE_URL)
+    
+    async with pool.acquire() as conn:
         await init_db(conn)
         
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -51,6 +56,7 @@ async def main():
             
             response_text, messages = await run_agent_turn(conn, messages, client)
             print(f"Agent: {response_text}\n")
+    await pool.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
