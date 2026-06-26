@@ -117,6 +117,26 @@ async def get_token(req: TokenRequest):
     
     jwt = token.to_jwt()
     
+    from livekit import api
+    lkapi = api.LiveKitAPI(
+        os.getenv("LIVEKIT_URL", "ws://localhost:7880"),
+        os.getenv("LIVEKIT_API_KEY", "devkey"),
+        os.getenv("LIVEKIT_API_SECRET", "secret")
+    )
+    try:
+        await lkapi.room.create_room(api.CreateRoomRequest(name=room_name))
+        await lkapi.agent_dispatch.create_dispatch(
+            api.CreateAgentDispatchRequest(
+                agent_name="mykare-voice-agent",
+                room=room_name
+            )
+        )
+    except Exception as e:
+        print(f"Failed to explicitly dispatch agent: {e}")
+    finally:
+        await lkapi.aclose()
+
+    
     return {
         "token": jwt,
         "room_name": room_name,

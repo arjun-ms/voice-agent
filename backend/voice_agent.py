@@ -404,4 +404,8 @@ def validate_env_vars():
 
 if __name__ == "__main__":
     validate_env_vars()
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))
+    cli.run_app(WorkerOptions(
+        agent_name="mykare-voice-agent",
+        entrypoint_fnc=entrypoint,
+        prewarm_fnc=prewarm
+    ))
