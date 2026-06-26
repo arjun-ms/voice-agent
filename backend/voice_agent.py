@@ -21,6 +21,7 @@ from livekit.agents import (
     cli,
     WorkerOptions,
 )
+from livekit.plugins import cartesia
 
 from backend import tools
 from backend.db import init_db, get_pool
@@ -314,9 +315,10 @@ async def entrypoint(ctx: JobContext):
         session = AgentSession(
             stt=inference.STT(model="deepgram/nova-3-general"),
             llm=inference.LLM(model="google/gemini-2.5-flash"),
-            tts=inference.TTS(
-                model="cartesia/sonic-2",
+            tts=cartesia.TTS(
+                model="sonic-english",
                 voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
+                api_key=os.getenv("CARTESIA_API_KEY")
             ),
             vad=ctx.proc.userdata["vad"],
         )
