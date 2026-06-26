@@ -60,3 +60,16 @@ async def test_post_token_returns_valid_jwt(client):
     assert "token" in data
     assert "room_name" in data
     assert data["token"].startswith("eyJ") # Valid JWT prefix
+
+@pytest.mark.asyncio
+async def test_cors_headers(client):
+    response = await client.options(
+        "/token",
+        headers={
+            "Origin": "https://voice-agent-pao6.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type"
+        }
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "*"
