@@ -55,3 +55,14 @@ async def test_get_summary_returns_persisted_summary():
     assert len(data["appointments"]) == 1
     assert data["preferences"] == "Prefers morning"
     assert "timestamp" in data
+
+def test_post_token_returns_valid_jwt():
+    with TestClient(app) as client:
+        response = client.post("/token", json={"participant_name": "Test User"})
+        
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert "token" in data
+    assert "room_name" in data
+    assert data["token"].startswith("eyJ") # Valid JWT prefix

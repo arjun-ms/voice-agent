@@ -59,3 +59,32 @@ async def get_summary(user_phone: str):
             "preferences": summary["preferences"],
             "timestamp": summary["timestamp"],
         }
+
+from pydantic import BaseModel
+import uuid
+from livekit.api import AccessToken, VideoGrants
+
+class TokenRequest(BaseModel):
+    participant_name: str
+
+@app.post("/token")
+async def get_token(req: TokenRequest):
+    room_name = "voice-agent-room-" + str(uuid.uuid4())[:8]
+    
+    grant = VideoGrants(room_join=True, room=room_name)
+    
+    # We allow fallbacks for local testing without valid env vars
+    token = AccessToken(
+        os.getenv("LIVEKIT_API_KEY", "devkey"),
+        os.getenv("LIVEKIT_API_SECRET", "secret")
+    )
+    token.with_identity(req.participant_name)
+    token.with_name(req.participant_name)
+    token.with_grants(grant)
+    
+    jwt = token.to_jwt()
+    
+    return {
+        "token": jwt,
+        "room_name": room_name
+    }
