@@ -6,6 +6,8 @@ _global_pool = None
 async def init_global_pool(dsn: str):
     global _global_pool
     if _global_pool is None:
+        if os.environ.get("RENDER") == "true" and ("localhost" in dsn or "127.0.0.1" in dsn):
+            raise RuntimeError("DATABASE_URL environment variable is not set. Please configure it in your Render dashboard.")
         _global_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
     return _global_pool
 

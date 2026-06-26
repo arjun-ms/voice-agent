@@ -118,3 +118,20 @@ async def test_save_conversation_summary(db):
     assert summary["summary_text"] == "User wanted to book an appointment."
     assert summary["appointments_json"] == '[{"id": 1, "date": "2030-10-15", "time": "10:00"}]'
     assert summary["preferences"] == "Prefers morning appointments"
+
+@pytest.mark.asyncio
+async def test_init_global_pool_fails_on_render_with_localhost():
+    import os
+    from backend.db import init_global_pool
+    # Temporarily set RENDER env var
+    original_render = os.environ.get("RENDER")
+    os.environ["RENDER"] = "true"
+    
+    try:
+        with pytest.raises(RuntimeError, match="DATABASE_URL environment variable is not set"):
+            await init_global_pool("postgresql://localhost:5432/postgres")
+    finally:
+        if original_render is not None:
+            os.environ["RENDER"] = original_render
+        else:
+            del os.environ["RENDER"]
