@@ -391,7 +391,7 @@ async def entrypoint(ctx: JobContext):
     # Trigger the greeting - use say() for an immediate, reliable greeting
     await session.say(
         "Hello! I'm the Mykare Health assistant. How can I help you today?",
-        allow_interruptions=True
+        allow_interruptions=False
     )
 
 
