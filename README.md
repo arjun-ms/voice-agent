@@ -1,6 +1,8 @@
 # Mykare Voice AI Agent
 
-This is a real-time conversational AI voice agent built for healthcare reception tasks. It allows users to speak directly with an AI, handles back-and-forth exchanges, manages appointments (via SQLite), and presents a seamless web UI with a synchronized voice avatar.
+This is a real-time conversational AI voice agent built for healthcare reception tasks. 
+
+It allows users to speak directly with an AI, handles back-and-forth exchanges, manages appointments (via Postgres), and presents a seamless web UI with a synchronized voice avatar.
 
 ## 🚀 Features
 - **Real-Time Voice AI**: Deepgram for STT, Cartesia for TTS, and Google Gemini 2.5 Flash for the LLM.
@@ -13,7 +15,7 @@ This is a real-time conversational AI voice agent built for healthcare reception
 - **Backend (Python)**: Uses `LiveKit Agents` framework. Handles WebRTC connections, STT/TTS routing, and DB operations.
 - **Frontend (React / Vite)**: Connects to the LiveKit room via `@livekit/components-react`. Displays tool invocations and live status.
 
----
+
 
 ## 💻 Local Setup Instructions
 
@@ -63,7 +65,12 @@ The frontend is a standard Vite React application.
 3. The build command will automatically be detected as `npm run build` and output directory as `dist`.
 4. Make sure your LiveKit WebSocket URL matches the one configured in the `.env` locally (or in the Vercel dashboard).
 
----
+
 
 ## 🎥 Demo
-Check the root directory of the repository for `screenshot.png`, `screenshot_connected.png`, and `screenshot_summary.png` to view the end-to-end user experience, including tool executions and the post-call summary screen.
+
+### 1. Welcome & Initial Screen
+![Initial Screen](assets/screenshot.png)
+
+### 2. Post-Call Summary Panel
+![Summary Screen](assets/conversation_summary_v2.png)

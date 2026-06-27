@@ -5,6 +5,10 @@ export interface SummaryData {
   appointments: any[]
   preferences: string
   timestamp: string
+  user?: {
+    name: string | null
+    phone_number: string
+  }
   cost_breakdown?: {
     duration_minutes: number
     stt_deepgram: string
@@ -32,6 +36,18 @@ export default function SummaryPanel({ data }: SummaryPanelProps) {
     <div className="summary-panel">
       <h2>Conversation Summary</h2>
       
+      {data.user && (
+        <div className="summary-section user-details" style={{ backgroundColor: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid var(--border-color)' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1.2rem' }}>👤</span> Patient Details
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.5rem 1rem', fontSize: '0.95rem' }}>
+            <strong>Name:</strong> <span>{data.user.name || <em>Guest</em>}</span>
+            <strong>Phone:</strong> <span style={{ fontFamily: 'monospace' }}>{data.user.phone_number}</span>
+          </div>
+        </div>
+      )}
+
       <div className="summary-section">
         <h3>Summary</h3>
         <p>{data.summary}</p>

@@ -171,3 +171,22 @@ async def test_end_conversation_persists_summary(db):
     assert result["summary"] == "Patient booked a morning appointment."
     assert len(result["appointments"]) == 1
     assert result["appointments"][0]["time"] == "10:00"
+
+@pytest.mark.asyncio
+async def test_end_conversation_handles_invalid_user_id(db):
+    conversation_history = [
+        {"role": "user", "content": "Hello"}
+    ]
+    
+    async def fake_summarize(history):
+        return {
+            "summary": "Guest conversation",
+            "preferences": "",
+        }
+    
+    # User ID 99999 does not exist in the database
+    result = await end_conversation(db, 99999, conversation_history, summarize_fn=fake_summarize)
+    
+    assert "summary" in result
+    assert result["summary"] == "Guest conversation"
+    assert result["timestamp"] is not None

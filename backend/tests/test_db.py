@@ -122,19 +122,24 @@ async def test_save_conversation_summary(db):
 @pytest.mark.asyncio
 async def test_init_global_pool_fails_on_render_with_localhost():
     import os
-    from backend.db import init_global_pool
+    import backend.db
+    # Reset the global pool for the test, but preserve it to restore later
+    original_pool = backend.db._global_pool
+    backend.db._global_pool = None
     # Temporarily set RENDER env var
     original_render = os.environ.get("RENDER")
     os.environ["RENDER"] = "true"
     
     try:
         with pytest.raises(RuntimeError, match="DATABASE_URL environment variable is not set"):
-            await init_global_pool("postgresql://localhost:5432/postgres")
+            await backend.db.init_global_pool("postgresql://localhost:5432/postgres")
     finally:
+        backend.db._global_pool = original_pool
         if original_render is not None:
             os.environ["RENDER"] = original_render
         else:
             del os.environ["RENDER"]
+
 
 @pytest.mark.asyncio
 async def test_dsn_password_encoding(monkeypatch):
@@ -150,14 +155,17 @@ async def test_dsn_password_encoding(monkeypatch):
         
     monkeypatch.setattr(backend.db.asyncpg, "create_pool", mock_create_pool)
     
-    # Reset the global pool for the test
+    # Reset the global pool for the test, but preserve it to restore later
+    original_pool = backend.db._global_pool
     backend.db._global_pool = None
     
-    # Test with an unencoded @ in the password
-    test_dsn = "postgresql://user:pass@word@host:5432/db"
-    await backend.db.init_global_pool(test_dsn)
-    
-    assert passed_dsn == "postgresql://user:pass%40word@host:5432/db"
-    
-    # Reset it back
-    backend.db._global_pool = None
+    try:
+        # Test with an unencoded @ in the password
+        test_dsn = "postgresql://user:pass@word@host:5432/db"
+        await backend.db.init_global_pool(test_dsn)
+        
+        assert passed_dsn == "postgresql://user:pass%40word@host:5432/db"
+    finally:
+        # Reset it back
+        backend.db._global_pool = original_pool
+

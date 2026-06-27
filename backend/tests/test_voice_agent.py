@@ -3,6 +3,7 @@ import json
 import os
 import pytest
 from unittest.mock import MagicMock
+from typing import Any, cast
 
 EXPECTED_TOOLS = [
     "identify_user",
@@ -17,7 +18,7 @@ EXPECTED_TOOLS = [
 @pytest.mark.asyncio
 async def test_agent_has_all_tools():
     agent = MykareHealthAgent()
-    tool_names = [t.info.name for t in agent.tools]
+    tool_names = [t.info.name for t in cast(Any, agent.tools)]
     for expected in EXPECTED_TOOLS:
         assert expected in tool_names, f"Missing tool: {expected}"
 
@@ -26,7 +27,7 @@ async def test_identify_user_tool_calls_through_to_db():
     agent = MykareHealthAgent()
     
     # Find the identify_user tool and call it directly
-    tool = next(t for t in agent.tools if t.info.name == "identify_user")
+    tool = next(t for t in cast(Any, agent.tools) if t.info.name == "identify_user")
     result_json = await tool(context=MagicMock(), phone_number="+919876543210")
     result = json.loads(result_json)
     
@@ -45,12 +46,12 @@ async def test_book_appointment_error_handling():
     agent = MykareHealthAgent()
     
     # 1. Identify user
-    identify_tool = next(t for t in agent.tools if t.info.name == "identify_user")
+    identify_tool = next(t for t in cast(Any, agent.tools) if t.info.name == "identify_user")
     user_result = json.loads(await identify_tool(context=MagicMock(), phone_number="+918888888888"))
     user_id = user_result["id"]
     
     # 2. Book an appointment
-    book_tool = next(t for t in agent.tools if t.info.name == "book_appointment")
+    book_tool = next(t for t in cast(Any, agent.tools) if t.info.name == "book_appointment")
     book_res_1 = json.loads(await book_tool(context=MagicMock(), user_id=user_id, date="2030-01-01", time="10:00"))
     assert "id" in book_res_1, "First booking should succeed"
     
@@ -78,7 +79,7 @@ async def test_tool_sends_data_messages():
     agent.room.local_participant.publish_data = mock_publish_data
     agent.room.local_participant.published_messages = []
     
-    tool = next(t for t in agent.tools if t.info.name == "identify_user")
+    tool = next(t for t in cast(Any, agent.tools) if t.info.name == "identify_user")
     await tool(context=MagicMock(), phone_number="+918888888888")
     
     messages = agent.room.local_participant.published_messages

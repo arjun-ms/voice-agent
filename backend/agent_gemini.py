@@ -5,6 +5,7 @@ from backend import tools
 from google import genai
 from google.genai import types
 
+
 from datetime import datetime
 
 def get_system_prompt():
@@ -14,8 +15,9 @@ def get_system_prompt():
 Today's date is: {today}. Do not allow booking appointments in the past.
 
 Your responsibilities:
-- Greet patients warmly and help them with appointment scheduling
-- Identify patients by asking for their phone number (use it as unique ID)
+- The agent MUST start the conversation by welcoming the user and asking for their name and phone number (with country code).
+- Identify patients using the `identify_user` tool (use phone number as unique ID).
+- **Verification Rule**: Before calling the `identify_user` tool, you MUST repeat the phone number back to the user to confirm the transcription is correct (e.g., "I heard +91 9876543210, is that correct?").
 - Extract the following from conversation: name, phone number, date, time, and intent
 - Book, retrieve, modify, or cancel appointments as requested
 - Confirm appointment details clearly (date, time) before and after booking
@@ -121,7 +123,7 @@ def get_gemini_tools():
         )
     ]
 
-async def dispatch_tool_call(conn: asyncpg.Connection, tool_name: str, arguments: dict, conversation_history: list[types.Content] = None) -> str:
+async def dispatch_tool_call(conn: asyncpg.Connection, tool_name: str, arguments: dict, conversation_history: list[types.Content] = None, room_name: str = None) -> str:
     """Execute a tool call and return the result as a JSON string for the LLM."""
     try:
         if tool_name == "identify_user":
@@ -142,7 +144,7 @@ async def dispatch_tool_call(conn: asyncpg.Connection, tool_name: str, arguments
         elif tool_name == "end_conversation":
             # For simplicity, convert the Gemini chat history to dictionaries for the summary tool
             history_dicts = [{"role": m.role, "content": m.parts[0].text if m.parts else ""} for m in (conversation_history or [])]
-            result = await tools.end_conversation(conn, int(arguments["user_id"]), history_dicts)
+            result = await tools.end_conversation(conn, int(arguments["user_id"]), history_dicts, room_name=room_name)
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
         
@@ -151,7 +153,7 @@ async def dispatch_tool_call(conn: asyncpg.Connection, tool_name: str, arguments
         return json.dumps({"error": str(e)})
 
 
-async def run_agent_turn(conn: asyncpg.Connection, chat: genai.chats.AsyncChat, user_message: str) -> str:
+async def run_agent_turn(conn: asyncpg.Connection, chat: genai.chats.AsyncChat, user_message: str, room_name: str = None) -> str:
     """
     Run one agent turn using the Gemini SDK.
     
@@ -159,6 +161,7 @@ async def run_agent_turn(conn: asyncpg.Connection, chat: genai.chats.AsyncChat, 
         conn: Database connection
         chat: Active Gemini AsyncChat session
         user_message: The user's input text
+        room_name: The current room name
     
     Returns:
         response_text - the agent's text reply
@@ -174,7 +177,7 @@ async def run_agent_turn(conn: asyncpg.Connection, chat: genai.chats.AsyncChat, 
             arguments = function_call.args
             
             # Dispatch the tool
-            result_json = await dispatch_tool_call(conn, tool_name, arguments, chat.get_history())
+            result_json = await dispatch_tool_call(conn, tool_name, arguments, chat.get_history(), room_name=room_name)
             
             # Prepare result
             tool_results.append(types.Part.from_function_response(

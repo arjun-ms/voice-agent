@@ -1,9 +1,10 @@
 import os
 import json
 import logging
-import asyncpg
+import asyncio
 from datetime import datetime
 from dotenv import load_dotenv, find_dotenv
+from typing import Any
 
 # Find and load the nearest .env file
 load_dotenv(find_dotenv())
@@ -21,13 +22,14 @@ from livekit.agents import (
     cli,
     WorkerOptions,
 )
-from livekit.plugins import cartesia
 
+from livekit.plugins import silero
 from backend import tools
 from backend.db import init_db, get_pool
 
-# Configure file logging
-log_dir = "logs"
+# Configure file logging (resolve relative to project root)
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+log_dir = os.path.join(_project_root, "logs")
 os.makedirs(log_dir, exist_ok=True)
 log_filename = os.path.join(log_dir, f"voice_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 
@@ -74,33 +76,48 @@ Guidelines:
 
 
 class MykareHealthAgent(Agent):
-    def __init__(self, db_url: str = None):
+    room: Any
+    _agent_session: Any
+    session_start_time: datetime | None
+
+    def __init__(self, db_url: str | None = None):
         super().__init__(instructions=get_agent_instructions())
         self._db_url = db_url or DATABASE_URL
-        self.current_user_id = None
+        self.current_user_id: int | None = None
+        self.room = None
+        self._agent_session = None
+        self.session_start_time = None
+        self._publish_lock = asyncio.Lock()
 
     async def on_enter(self):
         # The system instructions already tell the agent to greet patients.
         # generate_reply() is called from the participant_connected event
         # in the entrypoint, so no chat context manipulation needed here.
+        self.session_start_time = datetime.now()
         logger.info("Agent entered session")
 
-    async def send_tool_message(self, status: str, tool_name: str, result: str = None):
+    async def send_tool_message(self, status: str, tool_name: str, result: str | None = None):
         """Helper to send tool execution status to frontend via data channel."""
         if hasattr(self, 'room') and self.room and hasattr(self.room.local_participant, 'publish_data'):
             payload = {"status": status, "tool": tool_name}
             if result:
                 payload["result"] = result
-            await self.room.local_participant.publish_data(
-                json.dumps(payload).encode('utf-8'), 
-                reliable=True
-            )
+            try:
+                # Use lock to prevent "another operation is in progress" from concurrent publishes
+                async with self._publish_lock:
+                    await self.room.local_participant.publish_data(
+                        json.dumps(payload).encode('utf-8'), 
+                        reliable=True
+                    )
+            except Exception as e:
+                logger.warning(f"Could not send tool message ({tool_name} - {status}): {e}")
 
     @function_tool
     async def identify_user(
-        self, context: RunContext, phone_number: str, name: str = None
+        self, context: RunContext, phone_number: str, name: str | None = None
     ):
-        """Look up or create a user by their phone number. Call this when the patient provides their phone number."""
+        """Identify an existing user by phone number (with country code, e.g. +91) and optionally their name. Create a new one if not found."""
+        logger.info(f"===> LLM calling identify_user with phone_number: '{phone_number}', name: '{name}'")
         await self.send_tool_message("running", "identify_user")
         try:
             pool = get_pool()
@@ -113,7 +130,7 @@ class MykareHealthAgent(Agent):
             await self.send_tool_message("error", "identify_user", str(e))
             return json.dumps({"error": str(e), "suggestion": "Please inform the user and ask for the correct information."})
         except Exception as e:
-            logger.error(f"Error in identify_user: {e}")
+            logger.exception("Error in identify_user:")
             await self.send_tool_message("error", "identify_user", "Internal error")
             return json.dumps({"error": "Internal error occurred while identifying user."})
 
@@ -196,8 +213,8 @@ class MykareHealthAgent(Agent):
         context: RunContext,
         appointment_id: int,
         user_id: int,
-        date: str = None,
-        time: str = None,
+        date: str | None = None,
+        time: str | None = None,
     ):
         """Modify the date or time of an existing appointment. Requires appointment ID and user ID."""
         await self.send_tool_message("running", "modify_appointment")
@@ -227,15 +244,10 @@ class MykareHealthAgent(Agent):
         # Robustly extract chat history from the session
         history = []
         try:
-            if hasattr(self.session, "chat_ctx"):
-                ctx = self.session.chat_ctx
-            elif hasattr(self.session, "history"):
-                ctx = self.session.history
-            else:
-                ctx = None
+            ctx = getattr(self.session, "chat_ctx", getattr(self.session, "history", None))
                 
             if ctx is not None:
-                messages = getattr(ctx, "messages", ctx)
+                messages: Any = getattr(ctx, "messages", ctx)
                 if callable(messages):
                     messages = messages()
                 for msg in messages:
@@ -265,12 +277,14 @@ class MykareHealthAgent(Agent):
                 
         pool = get_pool()
         async with pool.acquire() as conn:
+            room_name = getattr(self.room, "name", None) if hasattr(self, "room") else None
             result = await tools.end_conversation(
                 conn, 
                 user_id, 
                 history, 
                 summarize_fn=generate_summary_from_history,
-                cost_breakdown=cost_breakdown_json
+                cost_breakdown=cost_breakdown_json,
+                room_name=room_name
             )
             await self.send_tool_message("success", "end_conversation", "Conversation ended")
             
@@ -301,10 +315,6 @@ class MykareHealthAgent(Agent):
 # --- LiveKit Agent Server ---
 # Only set up the server when this module is run directly.
 
-def prewarm(proc: JobProcess):
-    from livekit.plugins import silero
-    proc.userdata["vad"] = silero.VAD.load()
-
 async def entrypoint(ctx: JobContext):
     try:
         from backend.db import init_global_pool
@@ -315,14 +325,19 @@ async def entrypoint(ctx: JobContext):
         session = AgentSession(
             stt=inference.STT(model="deepgram/nova-3-general"),
             llm=inference.LLM(model="google/gemini-2.5-flash"),
-            tts=cartesia.TTS(
-                model="sonic-english",
+            tts=inference.TTS(
+                model="cartesia/sonic-2",
                 voice="79a125e8-cd45-4c13-8a67-188112f4dd22",
-                api_key=os.getenv("CARTESIA_API_KEY")
             ),
-            vad=ctx.proc.userdata["vad"],
+            vad=silero.VAD.load(),
         )
         logger.info("AgentSession created successfully")
+        
+        @session.on("user_speech_committed")
+        def on_user_speech_committed(msg):
+            # Check what type of message it is, usually it has a text property or it's just a string.
+            text = getattr(msg, 'text', str(msg))
+            logger.info(f"\n===> STT HEARD: {text}\n")
 
         agent = MykareHealthAgent()
         agent.room = ctx.room
@@ -339,7 +354,7 @@ async def entrypoint(ctx: JobContext):
         
         # Calculate cost
         cost_breakdown_json = None
-        if hasattr(agent, "session_start_time"):
+        if getattr(agent, "session_start_time", None) is not None:
             end_time = datetime.now()
             duration_minutes = (end_time - agent.session_start_time).total_seconds() / 60.0
             stt_cost = duration_minutes * 0.0043
@@ -359,7 +374,7 @@ async def entrypoint(ctx: JobContext):
         try:
             ctx_obj = getattr(session, "chat_ctx", getattr(session, "history", None))
             if ctx_obj is not None:
-                messages = getattr(ctx_obj, "messages", ctx_obj)
+                messages: Any = getattr(ctx_obj, "messages", ctx_obj)
                 if callable(messages):
                     messages = messages()
                 for msg in messages:
@@ -375,16 +390,21 @@ async def entrypoint(ctx: JobContext):
             from backend.summary import generate_summary_from_history
             pool = get_pool()
             async with pool.acquire() as conn:
+                room_name = getattr(ctx.room, "name", None) if hasattr(ctx, "room") else None
                 await tools.end_conversation(
-                    conn, user_id, history, generate_summary_from_history, cost_breakdown=cost_breakdown_json
+                    conn, user_id, history, generate_summary_from_history, cost_breakdown=cost_breakdown_json, room_name=room_name
                 )
         asyncio.create_task(run_fallback())
 
     await ctx.connect()
     
     # Wait for the user to join before starting the session
-    participant = await ctx.wait_for_participant()
-    logger.info(f"Participant joined: {participant.identity}")
+    try:
+        participant = await ctx.wait_for_participant()
+        logger.info(f"Participant joined: {participant.identity}")
+    except RuntimeError:
+        logger.warning("Room disconnected before participant could join.")
+        return
     
     agent.session_start_time = datetime.now()
         
@@ -392,7 +412,7 @@ async def entrypoint(ctx: JobContext):
     logger.info("Session started, generating initial greeting...")
     # Trigger the greeting - use say() for an immediate, reliable greeting
     await session.say(
-        "Hello! I'm the Mykare Health assistant. How can I help you today?",
+        "Hello! Welcome to Mykare Health. To get started, could you please tell me your name and your phone number with the country code?",
         allow_interruptions=False
     )
 
@@ -402,6 +422,5 @@ if __name__ == "__main__":
     cli.run_app(WorkerOptions(
         agent_name="mykare-voice-agent",
         entrypoint_fnc=entrypoint,
-        prewarm_fnc=prewarm,
         port=0
     ))

@@ -16,7 +16,8 @@ async def test_entrypoint_initialization_does_not_crash():
     ctx.wait_for_participant = AsyncMock(return_value=MagicMock(identity="test-participant"))
     
     with patch('backend.voice_agent.AgentSession') as mock_session_cls, \
-         patch('backend.db.init_global_pool', new_callable=AsyncMock):
+         patch('backend.db.init_global_pool', new_callable=AsyncMock), \
+         patch('livekit.plugins.silero.VAD.load') as mock_vad:
          
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session

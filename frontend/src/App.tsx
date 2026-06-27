@@ -24,6 +24,7 @@ function App() {
   const [status, setStatus] = useState('Ready')
   const [token, setToken] = useState('')
   const [serverUrl, setServerUrl] = useState('')
+  const [roomName, setRoomName] = useState('')
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null)
   const isConnectedRef = useRef(false)
 
@@ -67,6 +68,7 @@ function App() {
       if (data.token) { 
         setToken(data.token)
         setServerUrl(data.server_url || 'ws://localhost:7880')
+        setRoomName(data.room_name || '')
       }
     } catch (e) {
       setStatus('Ready')
@@ -78,27 +80,33 @@ function App() {
     setStatus('Summary')
     setToken('')
     
-    // Poll/Fetch for summary
+    // Poll/Fetch for summary with retries
     try {
-      // Small delay since backend generates it asynchronously on disconnect
-      await new Promise(r => setTimeout(r, 2000))
-      
-      const response = await fetch(`${API_URL}/api/summary/latest`)
-      if (response.ok) {
-        const data = await response.json()
-        setSummaryData(data)
-      } else {
-        // If it fails, try once more after 3 seconds
+      let found = false
+      // Poll every 3 seconds, up to 6 times (18 seconds total)
+      for (let i = 0; i < 6; i++) {
         await new Promise(r => setTimeout(r, 3000))
-        const retry = await fetch(`${API_URL}/api/summary/latest`)
-        if (retry.ok) {
-           setSummaryData(await retry.json())
+        
+        if (!roomName) {
+            console.error('No room name available to fetch summary.');
+            break;
         }
+
+        const response = await fetch(`${API_URL}/api/summary/room/${encodeURIComponent(roomName)}`)
+        if (response.ok) {
+          const data = await response.json()
+          setSummaryData(data)
+          found = true
+          break
+        }
+      }
+      if (!found) {
+        console.error('Summary was not ready after 18 seconds of waiting.')
       }
     } catch (e) {
       console.error('Failed to fetch summary', e)
     }
-  }, [API_URL])
+  }, [API_URL, roomName])
 
   // Called by the End Call / Cancel buttons
   const handleEndCall = useCallback(async () => {
@@ -187,13 +195,18 @@ function App() {
               )}
 
               {status === 'Ready' && (
-                <button 
-                  type="button" 
-                  className="primary-btn"
-                  onClick={handleStartCall}
-                >
-                  Start Call
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+                  <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                    The AI agent will ask for your name and phone number.
+                  </p>
+                  <button 
+                    type="button" 
+                    className="primary-btn"
+                    onClick={handleStartCall}
+                  >
+                    Start Call
+                  </button>
+                </div>
               )}
             </div>
           </>

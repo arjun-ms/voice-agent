@@ -16,7 +16,7 @@ def validate_time(time: str):
     if not re.match(r"^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$", time):
         raise ValueError("Invalid time format. Must be HH:MM in 24-hour format")
 
-async def identify_user(conn, phone_number: str, name: str = None) -> dict:
+async def identify_user(conn, phone_number: str, name: str | None = None) -> dict:
     """Look up or create a user by phone number. Returns user info dict."""
     validate_phone(phone_number)
     return await get_or_create_user(conn, phone_number, name)
@@ -24,7 +24,7 @@ async def identify_user(conn, phone_number: str, name: str = None) -> dict:
 # All possible 30-minute slots from 9:00 to 16:30
 ALL_SLOTS = [f"{h:02d}:{m:02d}" for h in range(9, 17) for m in (0, 30) if not (h == 17 and m == 0)]
 
-def check_date_and_time(date: str, time: str = None):
+def check_date_and_time(date: str, time: str | None = None):
     validate_date(date)
     date_obj = datetime.strptime(date, "%Y-%m-%d").date()
     
@@ -88,7 +88,7 @@ async def cancel_appointment(conn, appointment_id: int, user_id: int) -> bool:
     """Cancel an appointment. Verifies user ownership."""
     return await update_appointment(conn, appointment_id, user_id, status="cancelled")
 
-async def modify_appointment(conn, appointment_id: int, user_id: int, date: str = None, time: str = None) -> bool:
+async def modify_appointment(conn, appointment_id: int, user_id: int, date: str | None = None, time: str | None = None) -> bool:
     """Modify an appointment's date/time. Verifies ownership and prevents double booking."""
     if date or time:
         # If modifying, we need to check the combined new date/time.
@@ -107,10 +107,10 @@ async def modify_appointment(conn, appointment_id: int, user_id: int, date: str 
                 
     return await update_appointment(conn, appointment_id, user_id, date=date, time=time)
 
-async def end_conversation(conn, user_id: int, conversation_history: list[dict], summarize_fn=None, cost_breakdown: str = None) -> dict:
+async def end_conversation(conn, user_id: int | None, conversation_history: list[dict], summarize_fn=None, cost_breakdown: str | None = None, room_name: str | None = None) -> dict:
     """End the conversation: generate summary, persist it, return structured result."""
-    # Get the user's appointments
-    appointments = await get_user_appointments(conn, user_id)
+    # Get the user's appointments if they were identified
+    appointments = await get_user_appointments(conn, user_id) if user_id else []
     
     # Generate summary via the injected summarize function
     if summarize_fn:
@@ -125,7 +125,7 @@ async def end_conversation(conn, user_id: int, conversation_history: list[dict],
     timestamp = datetime.now(timezone.utc).isoformat()
     
     # Persist to DB
-    await save_conversation_summary(conn, user_id, summary_text, appointments_json, preferences, cost_breakdown)
+    await save_conversation_summary(conn, user_id, summary_text, appointments_json, preferences, cost_breakdown, room_name)
     
     return {
         "summary": summary_text,
