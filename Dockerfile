@@ -10,8 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements
 COPY requirements.txt .
 
-# Install dependencies (Handling potential UTF-16 encoding in requirements.txt from Windows)
-RUN iconv -f UTF-16 -t UTF-8 requirements.txt > req.txt || cp requirements.txt req.txt
+# Install dependencies (strip UTF-8 BOM from requirements.txt if present)
+RUN sed '1s/^\xEF\xBB\xBF//' requirements.txt > req.txt
 RUN pip install --no-cache-dir -r req.txt
 
 # Copy source code
