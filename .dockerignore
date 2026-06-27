@@ -35,5 +35,4 @@ logs/
 assets/
 docs/
 README.md
-start.sh
 seed.sql
