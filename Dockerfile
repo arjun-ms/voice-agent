@@ -1,29 +1,53 @@
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1
+
+ARG PYTHON_VERSION=3.11
+FROM python:${PYTHON_VERSION}-slim AS base
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+FROM base AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install system dependencies (required for PyAudio/webrtc if any, though LiveKit prebuilds wheels usually)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+COPY requirements-agent.txt ./requirements.txt
+RUN python -m venv .venv
+ENV PATH="/app/.venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy requirements
-COPY backend/requirements.txt .
+# Cache Silero and any other LiveKit plugin assets in the image.
+RUN python -m livekit.agents download-files
 
-# Install dependencies (Handling potential UTF-16 encoding in requirements.txt from Windows)
-RUN iconv -f UTF-16 -t UTF-8 requirements.txt > req.txt || cp requirements.txt req.txt
-RUN pip install --no-cache-dir -r req.txt
+COPY backend/ ./backend/
 
-# Copy source code
-COPY backend/ /app/backend/
-COPY seed.sql /app/
-COPY start.sh /app/
+FROM base AS runtime
 
-# Set Python Path
-ENV PYTHONPATH=/app
+ARG UID=10001
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/app" \
+    --shell "/sbin/nologin" \
+    --uid "${UID}" \
+    appuser
 
-# Make start script executable
+WORKDIR /app
+COPY --from=build --chown=appuser:appuser /app /app
+
+COPY --chown=appuser:appuser start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-# Command to run both the FastAPI backend and the LiveKit agent worker
+ENV PATH="/app/.venv/bin:$PATH"
+USER appuser
+
+EXPOSE 7860
+ENV PORT=7860
+
+# LiveKit Cloud injects LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET.
 CMD ["/app/start.sh"]
