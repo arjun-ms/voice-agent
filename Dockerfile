@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY backend/requirements.txt .
+COPY requirements.txt .
 
 # Install dependencies (Handling potential UTF-16 encoding in requirements.txt from Windows)
 RUN iconv -f UTF-16 -t UTF-8 requirements.txt > req.txt || cp requirements.txt req.txt
