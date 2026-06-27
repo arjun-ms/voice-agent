@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements-agent.txt ./requirements.txt
+COPY requirements.txt ./requirements.txt
 RUN python -m venv .venv
 ENV PATH="/app/.venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
@@ -25,6 +25,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m livekit.agents download-files
 
 COPY backend/ ./backend/
+COPY start.sh ./start.sh
+RUN chmod +x start.sh
 
 FROM base AS runtime
 
@@ -43,5 +45,4 @@ COPY --from=build --chown=appuser:appuser /app /app
 ENV PATH="/app/.venv/bin:$PATH"
 USER appuser
 
-# LiveKit Cloud injects LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET.
-CMD ["python", "backend/voice_agent.py", "start"]
+CMD ["./start.sh"]
