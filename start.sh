@@ -3,7 +3,7 @@
 set -e
 
 echo "Starting Uvicorn..."
-uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} &
+uvicorn backend.main:app --host 0.0.0.0 --port 7860 &
 UVICORN_PID=$!
 
 echo "Starting LiveKit Voice Agent Worker..."
