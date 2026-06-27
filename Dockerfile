@@ -40,14 +40,8 @@ RUN adduser \
 WORKDIR /app
 COPY --from=build --chown=appuser:appuser /app /app
 
-COPY --chown=appuser:appuser start.sh /app/start.sh
-RUN chmod +x /app/start.sh
-
 ENV PATH="/app/.venv/bin:$PATH"
 USER appuser
 
-EXPOSE 7860
-ENV PORT=7860
-
 # LiveKit Cloud injects LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET.
-CMD ["/app/start.sh"]
+CMD ["python", "backend/voice_agent.py", "start"]

@@ -1,0 +1,39 @@
+# Secrets
+.env
+.env.*
+
+# Version control and editor state
+.git/
+.github/
+.vscode/
+
+# Local Python and JavaScript environments
+venv/
+.venv/
+**/venv/
+**/.venv/
+node_modules/
+**/node_modules/
+
+# The frontend is deployed independently on Vercel
+frontend/
+
+# Tests, caches, logs, and local data
+**/tests/
+.pytest_cache/
+**/.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+logs/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Files not required by either production image
+assets/
+docs/
+README.md
+start.sh
+seed.sql

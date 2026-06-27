@@ -422,5 +422,4 @@ if __name__ == "__main__":
     cli.run_app(WorkerOptions(
         agent_name="mykare-voice-agent",
         entrypoint_fnc=entrypoint,
-        port=int(os.getenv("PORT", 8080))
     ))
