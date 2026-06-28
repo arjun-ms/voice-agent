@@ -139,6 +139,9 @@ Render, then connects directly to LiveKit, which dispatches the deployed agent.
 
 ## 🎥 Demo
 
+[view the full demo video](https://youtu.be/UN6qSFHkoJo)
+
+
 ### 1. Welcome & Initial Screen
 ![Initial Screen](assets/screenshot.png)
 

@@ -132,7 +132,7 @@ async def get_token(req: TokenRequest):
         os.getenv("LIVEKIT_API_SECRET", "secret")
     )
     try:
-        await lkapi.room.create_room(api.CreateRoomRequest(name=room_name))
+        await lkapi.room.create_room(api.CreateRoomRequest(name=room_name, empty_timeout=10 * 60))
         await lkapi.agent_dispatch.create_dispatch(
             api.CreateAgentDispatchRequest(
                 agent_name="mykare-voice-agent",

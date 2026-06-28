@@ -5,6 +5,8 @@ import * as livekitComponents from '@livekit/components-react'
 
 vi.mock('@livekit/components-react', () => ({
   useVoiceAssistant: vi.fn(),
+  useTracks: vi.fn().mockReturnValue([]),
+  VideoTrack: () => <video data-testid="video-track" />,
   BarVisualizer: () => <div data-testid="bar-visualizer" />
 }))
 

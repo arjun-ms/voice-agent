@@ -4,6 +4,7 @@ import App from './App'
 
 const mockUseVoiceAssistant = vi.fn()
 const mockUseRemoteParticipants = vi.fn()
+const mockUseTracks = vi.fn().mockReturnValue([])
 
 vi.mock('@livekit/components-react', () => ({
   LiveKitRoom: ({ children, onConnected }: any) => {
@@ -19,7 +20,9 @@ vi.mock('@livekit/components-react', () => ({
   useDataChannel: vi.fn().mockReturnValue([]),
   useRemoteParticipants: () => mockUseRemoteParticipants(),
   useVoiceAssistant: () => mockUseVoiceAssistant(),
-  BarVisualizer: () => <div data-testid="bar-visualizer" />
+  BarVisualizer: () => <div data-testid="bar-visualizer" />,
+  VideoTrack: () => <video data-testid="video-track" />,
+  useTracks: () => mockUseTracks(),
 }))
 
 // Helper: mock fetch that handles /health and /token
@@ -116,6 +119,26 @@ describe('App Call UI', () => {
     expect(await screen.findByRole('button', { name: /start call/i })).toBeInTheDocument()
     expect(screen.queryByTestId('livekit-room')).not.toBeInTheDocument()
   })
+
+  it('renders VideoTrack instead of BarVisualizer when agent has a video track', async () => {
+    global.fetch = mockFetchHealthy()
+
+    const { rerender } = render(<App />)
+    fireEvent.click(screen.getByText('Start Call'))
+    expect(await screen.findByText(/Waiting for agent/i)).toBeInTheDocument()
+
+    // Simulate agent joining with a video track
+    mockUseRemoteParticipants.mockReturnValue([{ identity: 'agent' }])
+    mockUseVoiceAssistant.mockReturnValue({ state: 'speaking' })
+    mockUseTracks.mockReturnValue([{ participant: { identity: 'agent' }, publication: { kind: 'video' }, source: 'camera' }])
+    
+    rerender(<App />)
+    
+    // Video should be rendered instead of BarVisualizer
+    expect(await screen.findByTestId('video-track')).toBeInTheDocument()
+    expect(screen.queryByTestId('bar-visualizer')).not.toBeInTheDocument()
+  })
+
 
   it('fetches and displays summary after call ends', async () => {
     const mockSummary = {

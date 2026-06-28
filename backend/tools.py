@@ -120,8 +120,8 @@ async def end_conversation(conn, user_id: int | None, conversation_history: list
     
     summary_text = llm_result.get("summary", "")
     preferences = llm_result.get("preferences", "")
-    appointments_dict = [dict(a) for a in appointments]
-    appointments_json = json.dumps(appointments_dict, default=str)
+    appointments_dict = [dict(a) for a in appointments] # for frontend to display
+    appointments_json = json.dumps(appointments_dict, default=str) # for saving to db (objects are not serializable by default)
     timestamp = datetime.now(timezone.utc).isoformat()
     
     # Persist to DB

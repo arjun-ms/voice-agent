@@ -23,7 +23,7 @@ from livekit.agents import (
     WorkerOptions,
 )
 
-from livekit.plugins import silero
+from livekit.plugins import silero, tavus
 from backend import tools
 from backend.db import init_db, get_pool
 
@@ -71,7 +71,7 @@ Guidelines:
 - Always confirm details before taking action
 - If a slot is unavailable, suggest checking other times
 - Maintain context across the full conversation
-- When the conversation is complete, call end_conversation to generate a summary
+- ONLY call end_conversation when the patient explicitly says goodbye or indicates they are completely done. NEVER end the conversation abruptly.
 """
 
 
@@ -263,9 +263,12 @@ class MykareHealthAgent(Agent):
         if hasattr(self, "session_start_time"):
             end_time = datetime.now()
             duration_minutes = (end_time - self.session_start_time).total_seconds() / 60.0
-            stt_cost = duration_minutes * 0.0043 # deepgram cost
-            tts_cost = duration_minutes * 0.015 # cartesia cost 
-            llm_cost = duration_minutes * 0.001 # gemini cost
+
+            # pricing
+            stt_cost = duration_minutes * 0.0043 # deepgram Nova 3 general cost
+            tts_cost = duration_minutes * 0.015 # cartesia Sonic 2 cost
+            llm_cost = duration_minutes * 0.001 # gemini 2.5 flash cost
+
             cost_breakdown = {
                 "duration_minutes": round(duration_minutes, 2),
                 "stt_deepgram": f"${stt_cost:.4f}",
@@ -290,19 +293,21 @@ class MykareHealthAgent(Agent):
             
             # Schedule a disconnect after the agent finishes speaking its final goodbye
             async def delayed_disconnect():
-                # Wait a moment for the LLM to process the tool return and start speaking
-                await asyncio.sleep(2)
+                # Wait long enough for the LLM to process the tool return and start speaking.
+                # A short wait (e.g., 2s) causes a race condition where wait_for_idle returns 
+                # immediately before TTS even starts, resulting in an abrupt drop.
+                await asyncio.sleep(10)
                 
                 try:
                     # Dynamically wait for the agent to finish speaking (become idle)
                     agent_session = getattr(self, '_agent_session', None)
                     if agent_session and hasattr(agent_session, 'wait_for_idle'):
                         await agent_session.wait_for_idle()
-                    else:
-                        await asyncio.sleep(8)
                 except Exception as e:
-                    logger.warning(f"wait_for_idle failed, falling back to sleep: {e}")
-                    await asyncio.sleep(8)
+                    logger.warning(f"wait_for_idle failed, continuing to disconnect: {e}")
+                
+                # Add a small buffer to let the audio finish playing on the frontend
+                await asyncio.sleep(2)
                     
                 if hasattr(self, 'room') and self.room:
                     logger.info("Automatically disconnecting the call as conversation ended.")
@@ -316,6 +321,8 @@ class MykareHealthAgent(Agent):
 # Only set up the server when this module is run directly.
 
 async def entrypoint(ctx: JobContext):
+    # Connect early to prevent LiveKit server from timing out the job dispatch (10s limit)
+    await ctx.connect()
     try:
         from backend.db import init_global_pool
         await init_global_pool(DATABASE_URL)
@@ -395,8 +402,6 @@ async def entrypoint(ctx: JobContext):
                     conn, user_id, history, generate_summary_from_history, cost_breakdown=cost_breakdown_json, room_name=room_name
                 )
         asyncio.create_task(run_fallback())
-
-    await ctx.connect()
     
     # Wait for the user to join before starting the session
     try:
@@ -408,6 +413,20 @@ async def entrypoint(ctx: JobContext):
     
     agent.session_start_time = datetime.now()
         
+    tavus_replica_id = os.environ.get("TAVUS_REPLICA_ID")
+    tavus_persona_id = os.environ.get("TAVUS_PERSONA_ID")
+    
+    if tavus_replica_id and tavus_persona_id:
+        try:
+            avatar = tavus.AvatarSession(
+                replica_id=tavus_replica_id,
+                persona_id=tavus_persona_id,
+            )
+            await avatar.start(session, room=ctx.room)
+            logger.info("Tavus avatar session started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start Tavus avatar session: {e}")
+
     await session.start(agent=agent, room=ctx.room)
     logger.info("Session started, generating initial greeting...")
     # Trigger the greeting - use say() for an immediate, reliable greeting

@@ -160,3 +160,275 @@ h1 {
   width: 40px;
   height: 40px;
 }
+/* --- Video Call Interface Styles --- */
+.video-call-container {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  aspect-ratio: 16 / 9;
+  background: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.full-screen-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  z-index: 10;
+  gap: 1rem;
+}
+
+.video-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #222;
+  position: relative;
+}
+
+.avatar-placeholder-large {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: #444;
+}
+
+.audio-visualizer-overlay {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.5);
+  padding: 1rem 2rem;
+  border-radius: 99px;
+}
+
+.video-status-overlay {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #888;
+}
+
+.status-indicator.listening {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.status-indicator.speaking {
+  background: #3b82f6;
+  box-shadow: 0 0 8px #3b82f6;
+}
+
+.status-indicator.thinking {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: pulse-think 1.5s infinite;
+}
+
+@keyframes pulse-think {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+/* Make call-interface wider when video is active */
+.call-interface.video-active {
+  max-width: 900px;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* --- Chat Interface Styling --- */
+.chat-container {
+  flex-grow: 1;
+  background: var(--bg);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box !important;
+}
+
+.chat-container * {
+  box-sizing: border-box !important;
+}
+
+/* Overriding default LiveKit chat styles */
+.lk-chat {
+  background: transparent !important;
+  color: var(--text) !important;
+  font-family: var(--sans) !important;
+  flex-grow: 1;
+  border: none !important;
+  height: 100% !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.lk-chat-header {
+  background: var(--code-bg) !important;
+  color: var(--text-h) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 1rem !important;
+  font-weight: 500 !important;
+  font-family: var(--heading) !important;
+  font-size: 1.1rem !important;
+  width: 100% !important;
+}
+
+.lk-chat-messages {
+  background: var(--bg) !important;
+  padding: 1rem !important;
+  flex-grow: 1 !important;
+  overflow-y: auto !important;
+  width: 100% !important;
+}
+
+/* Using general wildcard prefix selector to catch specific input class */
+.lk-chat-form {
+  background: var(--code-bg) !important;
+  padding: 1rem !important;
+  border-top: 1px solid var(--border) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.lk-chat-form-input {
+  background: var(--bg) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-h) !important;
+  padding: 0.75rem 1.25rem !important;
+  border-radius: 99px !important;
+  font-family: var(--sans) !important;
+  flex-grow: 1 !important;
+  min-width: 0 !important;
+  font-size: 0.95rem !important;
+}
+
+.lk-chat-form-input:focus {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-bg) !important;
+}
+
+.lk-chat-form-input::placeholder {
+  color: var(--text) !important;
+  opacity: 0.6 !important;
+}
+
+.lk-button.lk-chat-form-button {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-radius: 99px !important;
+  padding: 0.75rem 1.5rem !important;
+  font-weight: 600 !important;
+  font-family: var(--sans) !important;
+  transition: all 0.2s ease !important;
+  border: none !important;
+  cursor: pointer !important;
+}
+
+.lk-button.lk-chat-form-button:hover:not(:disabled) {
+  filter: brightness(1.1) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px var(--accent-bg) !important;
+}
+
+.lk-button.lk-chat-form-button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* --- Mic Toggle Button Styling --- */
+.mic-toggle-btn {
+  background: var(--code-bg) !important;
+  color: var(--text-h) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 99px !important;
+  padding: 0.75rem 1.25rem !important;
+  font-weight: 600 !important;
+  font-family: var(--sans) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.mic-toggle-btn:hover {
+  filter: brightness(1.05) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Active / Unmuted State (Listening) */
+.mic-toggle-btn[data-lk-enabled="true"] {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #10b981 !important;
+}
+
+.mic-toggle-btn[data-lk-enabled="true"]:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+}
+
+/* Inactive / Muted State */
+.mic-toggle-btn[data-lk-enabled="false"] {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #ef4444 !important;
+}
+
+.mic-toggle-btn[data-lk-enabled="false"]:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+}
+
+.mic-toggle-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+}

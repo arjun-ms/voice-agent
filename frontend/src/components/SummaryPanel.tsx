@@ -20,9 +20,19 @@ export interface SummaryData {
 
 interface SummaryPanelProps {
   data: SummaryData | null
+  error?: string
 }
 
-export default function SummaryPanel({ data }: SummaryPanelProps) {
+export default function SummaryPanel({ data, error }: SummaryPanelProps) {
+  if (error) {
+    return (
+      <div className="summary-panel error">
+        <h2 style={{ color: '#ef4444' }}>Summary Not Available</h2>
+        <p style={{ color: 'var(--text)', marginTop: '1rem', lineHeight: '1.5' }}>{error}</p>
+      </div>
+    )
+  }
+
   if (!data) {
     return (
       <div className="summary-panel loading">
