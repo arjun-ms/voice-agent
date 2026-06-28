@@ -9,9 +9,12 @@ app_port: 7860
 
 # Mykare Voice AI Agent
 
+**Live Demo:** [https://voice-agent-lemon-beta.vercel.app/](https://voice-agent-lemon-beta.vercel.app/)
+
 This is a real-time conversational AI voice agent built for healthcare reception tasks. 
 
 It allows users to speak directly with an AI, handles back-and-forth exchanges, manages appointments (via Postgres), and presents a seamless web UI with a synchronized voice avatar.
+
 
 ## 🚀 Features
 - **Real-Time Voice AI**: Deepgram for STT, Cartesia for TTS, and Google Gemini 2.5 Flash for the LLM.
