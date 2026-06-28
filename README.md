@@ -19,7 +19,7 @@ It allows users to speak directly with an AI, handles back-and-forth exchanges, 
 ## 🚀 Features
 - **Real-Time Voice AI**: Deepgram for STT, Cartesia for TTS, and Google Gemini 2.5 Flash for the LLM.
 - **Smart Tool Calling**: Automatically fetches available slots, books appointments, and retrieves user booking history via voice.
-- **Visual Call UI**: Shows the agent's current state (Initializing, Listening, Thinking, Speaking) using an orb avatar synced to speech volume.
+- **Visual Call UI**: Integrates **Tavus** for full-body conversational video avatars (`VideoCallAvatar`), automatically falling back to a speech-synced animated orb if video is disabled.
 - **Conversation Summary**: Automatically generates a structured post-call summary using the LLM when the conversation ends.
 - **Persistent DB**: PostgreSQL tracks users, appointments, and call history.
 
@@ -37,6 +37,7 @@ Rename `.env.example` to `.env` in the root folder and add your keys:
 - `GEMINI_API_KEY`: [Google AI Studio](https://aistudio.google.com/)
 - `DEEPGRAM_API_KEY`: [Deepgram Console](https://console.deepgram.com/)
 - `CARTESIA_API_KEY`: [Cartesia Dashboard](https://play.cartesia.ai/)
+- `TAVUS_API_KEY`, `TAVUS_REPLICA_ID`, `TAVUS_PERSONA_ID`: [Tavus Platform](https://platform.tavus.io/) (Optional, for avatar video integration)
 
 ### 2. Backend Setup
 Requires Python 3.9+
@@ -119,6 +120,7 @@ Future worker deployments use `lk agent deploy` from the repository root.
    - `LIVEKIT_URL`: the WebSocket URL from your LiveKit project.
    - `LIVEKIT_API_KEY`: the LiveKit project API key.
    - `LIVEKIT_API_SECRET`: the LiveKit project API secret.
+   - `TAVUS_API_KEY`, `TAVUS_REPLICA_ID`, `TAVUS_PERSONA_ID` (optional): key, replica ID, and persona ID to enable Tavus video replica.
 5. After deployment, verify `https://YOUR_RENDER_HOST/health` returns
    `{"status":"ok"}`.
 
